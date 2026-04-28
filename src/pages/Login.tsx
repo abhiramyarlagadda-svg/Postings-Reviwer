@@ -24,15 +24,15 @@ export default function Login() {
       let res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'demo@example.com', password: 'demo' })
+        body: JSON.stringify({ email: 'demo@example.com', password: 'demo1234' })
       });
       let data = await res.json();
-      
+
       if (!res.ok) {
         res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Demo User', email: 'demo@example.com', password: 'demo' })
+          body: JSON.stringify({ name: 'Demo User', email: 'demo@example.com', password: 'demo1234' })
         });
         data = await res.json();
       }

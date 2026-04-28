@@ -1,74 +1,286 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { useNavigate } from 'react-router';
-import CandidatesView from './CandidatesView';
-import JobsView from './JobsView';
-import ApplicationsView from './ApplicationsView';
-import { cn } from '@/src/lib/utils';
-import { Users, Briefcase, FileSignature, LogOut } from 'lucide-react';
+import { LogOut, X, Upload } from 'lucide-react';
+import CandidateList from '@/src/components/CandidateList';
+import CandidateDetail from '@/src/components/CandidateDetail';
+import type { Candidate } from '@/src/lib/aiEngine';
+
+const TECHNOLOGIES = [
+  'React', 'Vue', 'Angular', 'Node.js', 'Python', 'Java', 'Go',
+  'Ruby on Rails', 'PHP', 'TypeScript', 'C#', '.NET', 'Swift',
+  'Kotlin', 'Rust', 'Data Science', 'Machine Learning', 'DevOps', 'Other'
+];
+
+const COUNTRIES = [
+  'India', 'United States', 'United Kingdom', 'Canada', 'Australia',
+  'Germany', 'France', 'Netherlands', 'Singapore', 'UAE', 'Remote', 'Other'
+];
+
+function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [form, setForm] = useState({
+    name: '', email: '', technology: '', country: '',
+    experience_years: '', companies_worked: ''
+  });
+  const [file, setFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const token = localStorage.getItem('token');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const fd = new FormData();
+      fd.append('name', form.name);
+      fd.append('email', form.email);
+      fd.append('technology', form.technology);
+      fd.append('country', form.country);
+      fd.append('experience_years', form.experience_years || '0');
+
+      const companies = form.companies_worked.split(',').map(c => c.trim()).filter(Boolean);
+      fd.append('companies_worked', JSON.stringify(companies));
+
+      if (file) fd.append('resume', file);
+
+      const res = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add candidate');
+
+      onAdded();
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg border border-green-200 w-full max-w-lg shadow-xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-green-100">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-green-800">Add Candidate</h3>
+          <button onClick={onClose} className="text-green-500 hover:text-green-800">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {error && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Name *</label>
+              <input
+                required
+                className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600"
+                value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600"
+                value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Technology *</label>
+              <select
+                required
+                className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600 bg-white"
+                value={form.technology}
+                onChange={e => setForm(p => ({ ...p, technology: e.target.value }))}
+              >
+                <option value="">Select...</option>
+                {TECHNOLOGIES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Country *</label>
+              <select
+                required
+                className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600 bg-white"
+                value={form.country}
+                onChange={e => setForm(p => ({ ...p, country: e.target.value }))}
+              >
+                <option value="">Select...</option>
+                {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Experience (years)</label>
+            <input
+              type="number"
+              min="0"
+              max="50"
+              className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600"
+              value={form.experience_years}
+              onChange={e => setForm(p => ({ ...p, experience_years: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Companies Worked (comma-separated)</label>
+            <input
+              className="w-full border border-green-200 rounded px-2.5 py-1.5 text-xs text-green-900 focus:outline-none focus:border-green-600"
+              placeholder="e.g. Google, Meta, Amazon"
+              value={form.companies_worked}
+              onChange={e => setForm(p => ({ ...p, companies_worked: e.target.value }))}
+            />
+            <p className="text-[10px] text-green-500 mt-1">Used to skip jobs at companies the candidate already worked at.</p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-green-800 mb-1">Resume</label>
+            <label className="flex items-center gap-2 border border-dashed border-green-300 rounded px-3 py-2 cursor-pointer hover:bg-green-50 text-xs text-green-700">
+              <Upload className="w-3.5 h-3.5" />
+              <span className="truncate">{file ? file.name : 'Choose file (PDF / DOC / TXT)'}</span>
+              <input
+                type="file"
+                accept=".pdf,.txt,.doc,.docx"
+                className="hidden"
+                onChange={e => setFile(e.target.files?.[0] || null)}
+              />
+            </label>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded border border-green-300 text-green-700 hover:bg-green-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50"
+            >
+              {submitting ? 'Saving...' : 'Save Candidate'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'candidates' | 'jobs' | 'applications'>('candidates');
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const token = localStorage.getItem('token');
+
+  const fetchCandidates = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/candidates', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCandidates(data);
+        if (!selectedId && data.length > 0) setSelectedId(data[0].id);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => { fetchCandidates(); }, []);
+
+  const handleLogout = () => { logout(); navigate('/'); };
+  const selected = candidates.find(c => c.id === selectedId) || null;
+
   return (
-    <div className="h-screen bg-green-50 text-green-900 font-sans flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="h-16 bg-green-700 text-white flex items-center justify-between px-6 md:px-8 border-b-4 border-green-800 shrink-0 shadow-sm z-20">
+    <div className="h-screen bg-green-50 flex flex-col overflow-hidden">
+      <header className="h-14 bg-green-700 text-white flex items-center justify-between px-6 shrink-0 shadow z-20">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-white rounded-sm flex items-center justify-center shadow-inner">
-            <div className="w-4 h-4 bg-green-700"></div>
+          <div className="w-7 h-7 bg-white rounded flex items-center justify-center">
+            <div className="w-3.5 h-3.5 bg-green-700" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight hidden sm:block">POSTINGS REVIEWER <span className="font-light opacity-80 uppercase text-[10px] tracking-widest align-middle">| AI Engine</span></h1>
+          <span className="text-sm font-bold tracking-tight">POSTINGS REVIEWER</span>
+          <span className="text-[10px] font-light opacity-60 tracking-widest hidden sm:block">| AI ENGINE</span>
         </div>
-        <nav className="flex gap-2 sm:gap-6 text-sm font-medium items-center">
-          <button onClick={() => setActiveTab('candidates')} className={cn("transition-colors font-bold uppercase text-[10px] tracking-widest py-1.5 px-3 rounded-sm flex items-center gap-1.5", activeTab === 'candidates' ? "bg-green-800 text-white" : "hover:bg-green-800/50 hover:text-white")}>
-             <Users className="w-3.5 h-3.5" /> Candidates
+
+        <div className="relative">
+          <button
+            onClick={() => setProfileOpen(o => !o)}
+            className="w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-sm flex items-center justify-center hover:bg-green-200 transition-colors border border-green-500"
+          >
+            {user?.name?.charAt(0).toUpperCase() || 'U'}
           </button>
-          <button onClick={() => setActiveTab('jobs')} className={cn("transition-colors font-bold uppercase text-[10px] tracking-widest py-1.5 px-3 rounded-sm flex items-center gap-1.5", activeTab === 'jobs' ? "bg-green-800 text-white" : "hover:bg-green-800/50 hover:text-white")}>
-             <Briefcase className="w-3.5 h-3.5" /> Job Pool
-          </button>
-          <button onClick={() => setActiveTab('applications')} className={cn("transition-colors font-bold uppercase text-[10px] tracking-widest py-1.5 px-3 rounded-sm flex items-center gap-1.5", activeTab === 'applications' ? "bg-green-800 text-white" : "hover:bg-green-800/50 hover:text-white")}>
-             <FileSignature className="w-3.5 h-3.5" /> Applications
-          </button>
-          
-          <div className="relative ml-2 sm:ml-4">
-            <button
-              onClick={() => setProfileOpen(o => !o)}
-              className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold cursor-pointer shadow-sm border border-green-600 hover:bg-green-200 transition-colors"
-            >
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </button>
-            {profileOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                <div className="absolute right-0 top-10 w-48 bg-white border-2 border-green-200 rounded-lg shadow-lg z-50 text-green-900 overflow-hidden flex flex-col">
-                  <div className="p-3 border-b border-green-100 bg-green-50">
-                    <p className="text-sm font-bold truncate">{user?.name || 'Demo User'}</p>
-                    <p className="text-[10px] text-green-600 uppercase tracking-widest truncate">{user?.email || 'demo@example.com'}</p>
-                  </div>
-                  <button className="flex items-center gap-2 text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-600 hover:bg-green-100 transition-colors" onClick={handleLogout}>
-                    <LogOut className="w-3 h-3" /> Logout
-                  </button>
+          {profileOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+              <div className="absolute right-0 top-10 w-52 bg-white border border-green-200 rounded shadow-lg z-50 overflow-hidden">
+                <div className="p-3 border-b border-green-100 bg-green-50">
+                  <p className="text-xs font-bold text-green-900 truncate">{user?.name}</p>
+                  <p className="text-[10px] text-green-600 truncate">{user?.email}</p>
                 </div>
-              </>
-            )}
-          </div>
-        </nav>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-600 hover:bg-green-50"
+                >
+                  <LogOut className="w-3 h-3" /> Logout
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden p-4 md:p-6 gap-6 bg-green-50 relative z-0">
-        {activeTab === 'candidates' && <CandidatesView />}
-        {activeTab === 'jobs' && <JobsView />}
-        {activeTab === 'applications' && <ApplicationsView />}
+      <div className="flex-1 flex overflow-hidden">
+        <CandidateList
+          candidates={candidates}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onAdd={() => setShowAdd(true)}
+          loading={loading}
+        />
+
+        <main key={selected?.id || 'empty'} className="flex-1 flex flex-col overflow-hidden">
+          {selected ? (
+            <CandidateDetail candidate={selected} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-green-400 text-xs uppercase tracking-widest font-bold">
+              {loading ? 'Loading...' : 'Select a candidate from the left to begin'}
+            </div>
+          )}
+        </main>
       </div>
+
+      {showAdd && (
+        <AddCandidateModal
+          onClose={() => setShowAdd(false)}
+          onAdded={fetchCandidates}
+        />
+      )}
     </div>
   );
 }
