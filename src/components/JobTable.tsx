@@ -11,8 +11,8 @@ interface Props {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  filterApplied: 'all' | 'applied' | 'not_applied';
-  onFilterChange: (f: 'all' | 'applied' | 'not_applied') => void;
+  filterApplied: 'all' | 'applied';
+  onFilterChange: (f: 'all' | 'applied') => void;
 }
 
 export default function JobTable({
@@ -31,10 +31,10 @@ export default function JobTable({
     });
   };
 
+  // ALL hides applied jobs; APPLIED shows only applied jobs
   const passesFilter = (jobId: string) => {
     if (filterApplied === 'applied') return appliedJobIds.has(jobId);
-    if (filterApplied === 'not_applied') return !appliedJobIds.has(jobId);
-    return true;
+    return !appliedJobIds.has(jobId);
   };
 
   const items: (JobResult | { job: Job })[] = analysed
@@ -44,7 +44,7 @@ export default function JobTable({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex items-center gap-2 mb-3">
-        {(['all', 'applied', 'not_applied'] as const).map(f => (
+        {(['all', 'applied'] as const).map(f => (
           <button
             key={f}
             onClick={() => onFilterChange(f)}
@@ -54,7 +54,7 @@ export default function JobTable({
                 : 'bg-white text-green-700 border border-green-200 hover:bg-green-50'
             }`}
           >
-            {f === 'all' ? 'All' : f === 'applied' ? 'Applied' : 'Not Applied'}
+            {f === 'all' ? 'All Jobs' : 'Applied'}
           </button>
         ))}
       </div>

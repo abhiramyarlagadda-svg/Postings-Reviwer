@@ -18,7 +18,7 @@ export default function CandidateDetail({ candidate }: Props) {
   const [analysing, setAnalysing] = useState(false);
   const [results, setResults] = useState<JobResult[] | null>(null);
   const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
-  const [filterApplied, setFilterApplied] = useState<'all' | 'applied' | 'not_applied'>('all');
+  const [filterApplied, setFilterApplied] = useState<'all' | 'applied'>('all');
   const [error, setError] = useState('');
   const [resumePreviewUrl, setResumePreviewUrl] = useState<string | null>(null);
   const [applyConfirmJob, setApplyConfirmJob] = useState<Job | null>(null);
