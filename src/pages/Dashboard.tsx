@@ -25,8 +25,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const { token, refreshSession, logout } = useAuth();
-  const navigate = useNavigate();
+  const { token } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,35 +33,21 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
     setError('');
 
     try {
-      const buildFormData = () => {
-        const fd = new FormData();
-        fd.append('name', form.name);
-        fd.append('email', form.email);
-        fd.append('technology', form.technology);
-        fd.append('country', form.country);
-        fd.append('experience_years', form.experience_years || '0');
-        const companies = form.companies_worked.split(',').map(c => c.trim()).filter(Boolean);
-        fd.append('companies_worked', JSON.stringify(companies));
-        if (file) fd.append('resume', file);
-        return fd;
-      };
+      const fd = new FormData();
+      fd.append('name', form.name);
+      fd.append('email', form.email);
+      fd.append('technology', form.technology);
+      fd.append('country', form.country);
+      fd.append('experience_years', form.experience_years || '0');
+      const companies = form.companies_worked.split(',').map(c => c.trim()).filter(Boolean);
+      fd.append('companies_worked', JSON.stringify(companies));
+      if (file) fd.append('resume', file);
 
-      let authToken = token;
-      let res = await fetch('/api/candidates', {
+      const res = await fetch('/api/candidates', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
-        body: buildFormData()
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd
       });
-
-      if (res.status === 401) {
-        authToken = await refreshSession();
-        if (!authToken) { logout(); navigate('/login'); return; }
-        res = await fetch('/api/candidates', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${authToken}` },
-          body: buildFormData()
-        });
-      }
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add candidate');
@@ -201,7 +186,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
 }
 
 export default function Dashboard() {
-  const { user, token, logout, refreshSession } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -212,15 +197,7 @@ export default function Dashboard() {
   const fetchCandidates = async () => {
     setLoading(true);
     try {
-      let authToken = token;
-      let res = await fetch('/api/candidates', { headers: { Authorization: `Bearer ${authToken}` } });
-
-      if (res.status === 401) {
-        authToken = await refreshSession();
-        if (!authToken) { logout(); navigate('/login'); return; }
-        res = await fetch('/api/candidates', { headers: { Authorization: `Bearer ${authToken}` } });
-      }
-
+      const res = await fetch('/api/candidates', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (Array.isArray(data)) {
         setCandidates(data);

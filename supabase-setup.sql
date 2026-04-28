@@ -2,11 +2,22 @@
 -- Project: vrkuuddaglyxtdaesbnv.supabase.co
 -- Paste the entire file and click "Run"
 
+-- ─── USERS TABLE (replaces Supabase Auth) ──────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  token TEXT UNIQUE NOT NULL DEFAULT gen_random_uuid()::TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ─── TABLES ────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.candidates (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   email TEXT,
   technology TEXT,
@@ -32,41 +43,19 @@ CREATE TABLE IF NOT EXISTS public.applications (
 CREATE INDEX IF NOT EXISTS idx_applications_user_id ON public.applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_candidate_id ON public.applications(candidate_id);
 
--- ─── ROW LEVEL SECURITY ────────────────────────────────────────────────────────
+-- ─── DISABLE RLS (service role key bypasses it anyway) ─────────────────────────
 
-ALTER TABLE public.candidates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
-
--- Users can only see and modify their own candidates
-CREATE POLICY "users_own_candidates" ON public.candidates
-  FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
--- Users can only see and modify their own applications
-CREATE POLICY "users_own_applications" ON public.applications
-  FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.candidates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.applications DISABLE ROW LEVEL SECURITY;
 
 -- ─── STORAGE ───────────────────────────────────────────────────────────────────
 
--- Public bucket so resume_url links work directly
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('resumes', 'resumes', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Authenticated users can upload resumes
-CREATE POLICY "authenticated_upload_resumes" ON storage.objects
-  FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'resumes');
-
--- Anyone can read resume files (links are public)
+-- Allow service role to upload and anyone to read
 CREATE POLICY "public_read_resumes" ON storage.objects
   FOR SELECT
   USING (bucket_id = 'resumes');
-
--- Authenticated users can delete their own resumes
-CREATE POLICY "users_delete_own_resumes" ON storage.objects
-  FOR DELETE TO authenticated
-  USING (bucket_id = 'resumes' AND auth.uid()::text = (storage.foldername(name))[1]);

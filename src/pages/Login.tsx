@@ -38,7 +38,7 @@ export default function Login() {
       }
 
       if (!res.ok) throw new Error(data.error);
-      login(data.user, data.token, data.refresh_token);
+      login(data.user, data.token);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.message);
@@ -55,7 +55,7 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      login(data.user, data.token, data.refresh_token);
+      login(data.user, data.token);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.message);

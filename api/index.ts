@@ -4,19 +4,8 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
 
-// Base client (anon key, no user context) — used only for auth token validation + signUp/signIn
-function getCandidatesClient(token?: string) {
-  const opts: any = { auth: { autoRefreshToken: false, persistSession: false } };
-  if (token) opts.global = { headers: { Authorization: `Bearer ${token}` } };
-  return createClient(
-    process.env.SUPABASE_URL || '',
-    process.env.SUPABASE_ANON_KEY || '',
-    opts
-  );
-}
-
-// Admin client with service role key — bypasses email confirmation
-function getAdminClient() {
+// Single DB client using service role — bypasses RLS for all operations
+function getDb() {
   return createClient(
     process.env.SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || '',
@@ -40,16 +29,15 @@ app.use(express.json({ limit: '10mb' }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// Auth middleware - validates Supabase Auth JWT
+// Auth middleware — looks up token in the users table (no JWT, no expiry)
 const authenticate = async (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data, error } = await getCandidatesClient().auth.getUser(token);
-  if (error || !data.user) return res.status(401).json({ error: 'Unauthorized' });
+  const { data, error } = await getDb().from('users').select('*').eq('token', token).maybeSingle();
+  if (error || !data) return res.status(401).json({ error: 'Unauthorized' });
 
-  req.user = data.user;
-  req.token = token;
+  req.user = data;
   next();
 };
 
@@ -60,31 +48,22 @@ app.post('/api/auth/register', async (req, res) => {
     const { name, email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const admin = getAdminClient();
-    // Create user with email already confirmed — no verification email sent
-    const { data: userData, error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name: name || email.split('@')[0] }
-    });
+    const db = getDb();
 
-    if (createError) return res.status(400).json({ error: createError.message });
+    const { data: existing } = await db.from('users').select('id').eq('email', email).maybeSingle();
+    if (existing) return res.status(400).json({ error: 'Email already registered' });
 
-    // Sign in immediately to get a session
-    const { data: signInData, error: signInError } = await getCandidatesClient().auth.signInWithPassword({ email, password });
-    if (signInError || !signInData.session) {
-      return res.status(400).json({ error: 'Account created — please log in.' });
-    }
+    const { data, error } = await db
+      .from('users')
+      .insert({ name: name || email.split('@')[0], email, password })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
 
     res.json({
-      user: {
-        id: userData.user.id,
-        name: name || email.split('@')[0],
-        email
-      },
-      token: signInData.session.access_token,
-      refresh_token: signInData.session.refresh_token
+      user: { id: data.id, name: data.name, email: data.email },
+      token: data.token
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Registration failed: ' + err.message });
@@ -96,47 +75,31 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const { data, error } = await getCandidatesClient().auth.signInWithPassword({ email, password });
-    if (error || !data.session) return res.status(401).json({ error: 'Invalid credentials' });
+    const { data, error } = await getDb()
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .eq('password', password)
+      .maybeSingle();
+
+    if (error || !data) return res.status(401).json({ error: 'Invalid credentials' });
 
     res.json({
-      user: {
-        id: data.user.id,
-        name: data.user.user_metadata?.name || email.split('@')[0],
-        email: data.user.email
-      },
-      token: data.session.access_token,
-      refresh_token: data.session.refresh_token
+      user: { id: data.id, name: data.name, email: data.email },
+      token: data.token
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Login failed: ' + err.message });
   }
 });
 
-app.post('/api/auth/refresh', async (req, res) => {
-  try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) return res.status(400).json({ error: 'refresh_token required' });
-
-    const { data, error } = await getCandidatesClient().auth.refreshSession({ refresh_token });
-    if (error || !data.session) return res.status(401).json({ error: 'Session expired, please log in again' });
-
-    res.json({
-      token: data.session.access_token,
-      refresh_token: data.session.refresh_token
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Refresh failed: ' + err.message });
-  }
-});
-
 // ─── CANDIDATES ────────────────────────────────────────────────────────────────
 
 app.get('/api/candidates', authenticate, async (req: any, res) => {
-  const db = getCandidatesClient(req.token);
-  const { data, error } = await db
+  const { data, error } = await getDb()
     .from('candidates')
     .select('*')
+    .eq('user_id', req.user.id)
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -150,21 +113,18 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
       return res.status(400).json({ error: 'Name, technology, and country are required' });
     }
 
-    const db = getCandidatesClient(req.token);
+    const db = getDb();
 
     let resume_url: string | null = null;
     if (req.file) {
       const ext = req.file.originalname.split('.').pop() || 'pdf';
-      const path = `${req.user.id}/${Date.now()}.${ext}`;
+      const filePath = `${req.user.id}/${Date.now()}.${ext}`;
       const { error: uploadError } = await db.storage
         .from('resumes')
-        .upload(path, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false
-        });
+        .upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
 
       if (!uploadError) {
-        const { data: urlData } = db.storage.from('resumes').getPublicUrl(path);
+        const { data: urlData } = db.storage.from('resumes').getPublicUrl(filePath);
         resume_url = urlData.publicUrl;
       }
     }
@@ -204,33 +164,20 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
 
 app.get('/api/jobs', authenticate, async (req: any, res) => {
   try {
-    const {
-      date_from,
-      technology,
-      page = '1',
-      limit = '20'
-    } = req.query;
+    const { date_from, technology, page = '1', limit = '20' } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
     const from = (pageNum - 1) * limitNum;
     const to = from + limitNum - 1;
 
-    let query = jobsDb
-      .from('jobs')
-      .select('*', { count: 'exact' })
-      .eq('status', 'active');
+    let query = jobsDb.from('jobs').select('*', { count: 'exact' }).eq('status', 'active');
 
-    if (date_from) {
-      query = query.gte('posted_at', date_from);
-    }
+    if (date_from) query = query.gte('posted_at', date_from);
 
     if (technology) {
-      // Strip characters that would break PostgREST or() syntax
       const tech = String(technology).replace(/[,()%{}*]/g, ' ').trim();
-      if (tech) {
-        query = query.or(`title.ilike.%${tech}%,description.ilike.%${tech}%`);
-      }
+      if (tech) query = query.or(`title.ilike.%${tech}%,description.ilike.%${tech}%`);
     }
 
     const { data, error, count } = await query
@@ -255,9 +202,7 @@ app.get('/api/jobs', authenticate, async (req: any, res) => {
 
 app.get('/api/applications', authenticate, async (req: any, res) => {
   const { candidate_id } = req.query;
-  const db = getCandidatesClient(req.token);
-  let query = db.from('applications').select('*');
-
+  let query = getDb().from('applications').select('*');
   if (candidate_id) query = query.eq('candidate_id', candidate_id);
 
   const { data, error } = await query.order('created_at', { ascending: false });
@@ -270,7 +215,7 @@ app.post('/api/applications', authenticate, async (req: any, res) => {
     const { candidate_id, job_id } = req.body;
     if (!candidate_id || !job_id) return res.status(400).json({ error: 'candidate_id and job_id required' });
 
-    const db = getCandidatesClient(req.token);
+    const db = getDb();
 
     const { data: existing } = await db
       .from('applications')
@@ -283,12 +228,7 @@ app.post('/api/applications', authenticate, async (req: any, res) => {
 
     const { data, error } = await db
       .from('applications')
-      .insert({
-        user_id: req.user.id,
-        candidate_id,
-        job_id,
-        status: 'applied'
-      })
+      .insert({ user_id: req.user.id, candidate_id, job_id, status: 'applied' })
       .select()
       .single();
 
@@ -304,9 +244,7 @@ app.post('/api/applications', authenticate, async (req: any, res) => {
 app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
   try {
     const { candidate, jobs } = req.body;
-    if (!candidate || !Array.isArray(jobs) || jobs.length === 0) {
-      return res.json({ scores: [] });
-    }
+    if (!candidate || !Array.isArray(jobs) || jobs.length === 0) return res.json({ scores: [] });
 
     const truncatedJobs = jobs.slice(0, 50);
     const jobList = truncatedJobs.map((j: any, i: number) => {
