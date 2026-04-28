@@ -3,12 +3,13 @@ import multer from 'multer';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
+import bcrypt from 'bcryptjs';
 
-// Single DB client using service role — bypasses RLS for all operations
+// RLS is disabled on all tables so anon key has full access server-side
 function getDb() {
   return createClient(
     process.env.SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    process.env.SUPABASE_ANON_KEY || '',
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
@@ -53,9 +54,11 @@ app.post('/api/auth/register', async (req, res) => {
     const { data: existing } = await db.from('users').select('id').eq('email', email).maybeSingle();
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
+    const password_hash = await bcrypt.hash(password, 10);
+
     const { data, error } = await db
       .from('users')
-      .insert({ name: name || email.split('@')[0], email, password })
+      .insert({ name: name || email.split('@')[0], email, password: password_hash })
       .select()
       .single();
 
@@ -79,10 +82,12 @@ app.post('/api/auth/login', async (req, res) => {
       .from('users')
       .select('*')
       .eq('email', email)
-      .eq('password', password)
       .maybeSingle();
 
     if (error || !data) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const passwordMatch = await bcrypt.compare(password, data.password);
+    if (!passwordMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     res.json({
       user: { id: data.id, name: data.name, email: data.email },

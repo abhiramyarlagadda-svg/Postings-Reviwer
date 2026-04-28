@@ -55,7 +55,12 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('resumes', 'resumes', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Allow service role to upload and anyone to read
+-- Allow anyone to read resume files (public bucket)
 CREATE POLICY "public_read_resumes" ON storage.objects
   FOR SELECT
   USING (bucket_id = 'resumes');
+
+-- Allow anon key (server-side API) to upload resumes
+CREATE POLICY "anon_upload_resumes" ON storage.objects
+  FOR INSERT
+  WITH CHECK (bucket_id = 'resumes');
