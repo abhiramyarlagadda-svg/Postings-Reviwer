@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Zap, FileText, X, ExternalLink } from 'lucide-react';
+import { Calendar, Zap, FileText, X, ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { calculateScores, sortResults, type Candidate, type Job, type JobResult } from '@/src/lib/aiEngine';
 import JobTable from './JobTable';
+import UploadJobsModal from './UploadJobsModal';
 
 interface Props {
   candidate: Candidate;
@@ -22,6 +23,8 @@ export default function CandidateDetail({ candidate }: Props) {
   const [error, setError] = useState('');
   const [resumePreviewUrl, setResumePreviewUrl] = useState<string | null>(null);
   const [applyConfirmJob, setApplyConfirmJob] = useState<Job | null>(null);
+  const [showUploadJobs, setShowUploadJobs] = useState(false);
+  const [uploadedSource, setUploadedSource] = useState(false);
 
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
@@ -89,6 +92,16 @@ export default function CandidateDetail({ candidate }: Props) {
     } finally {
       setAnalysing(false);
     }
+  };
+
+  // Load jobs from Excel upload — replaces current list, clears analysis
+  const handleJobsUploaded = (uploaded: Job[]) => {
+    setJobs(uploaded);
+    setResults(null);
+    setError('');
+    setPage(1);
+    setTotalPages(1);
+    setUploadedSource(true);
   };
 
   // Opens job URL in new tab and shows the "Did you apply?" confirmation popup
@@ -168,6 +181,13 @@ export default function CandidateDetail({ candidate }: Props) {
         </button>
 
         <button
+          onClick={() => setShowUploadJobs(true)}
+          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" /> Upload Jobs
+        </button>
+
+        <button
           onClick={handleAnalyse}
           disabled={analysing || jobs.length === 0}
           className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -176,6 +196,11 @@ export default function CandidateDetail({ candidate }: Props) {
           {analysing ? 'Analysing...' : 'AI Analyse'}
         </button>
 
+        {uploadedSource && !results && (
+          <span className="text-xs text-green-600 font-medium italic">
+            {jobs.length} jobs loaded from file
+          </span>
+        )}
         {results && (
           <span className="text-xs text-green-700 uppercase tracking-widest font-bold">
             {results.filter(r => r.suitable).length} relevant / {results.length} total
@@ -201,6 +226,14 @@ export default function CandidateDetail({ candidate }: Props) {
         filterApplied={filterApplied}
         onFilterChange={setFilterApplied}
       />
+
+      {/* ── Upload Jobs Modal ── */}
+      {showUploadJobs && (
+        <UploadJobsModal
+          onClose={() => setShowUploadJobs(false)}
+          onLoad={handleJobsUploaded}
+        />
+      )}
 
       {/* ── Resume Preview Modal ── */}
       {resumePreviewUrl && (
