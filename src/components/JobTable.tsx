@@ -7,7 +7,7 @@ interface Props {
   jobs: Job[];
   loading: boolean;
   appliedJobIds: Set<string>;
-  onApply: (jobId: string) => void;
+  onApply: (job: Job) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -122,7 +122,7 @@ export default function JobTable({
                       )}
                       <td className="px-3 py-2.5">
                         <button
-                          onClick={() => !isApplied && onApply(j.id)}
+                          onClick={() => !isApplied && onApply(j)}
                           disabled={isApplied}
                           className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
                             isApplied

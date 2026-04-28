@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Zap, FileText } from 'lucide-react';
+import { Calendar, Zap, FileText, X, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { calculateScores, sortResults, type Candidate, type Job, type JobResult } from '@/src/lib/aiEngine';
 import JobTable from './JobTable';
@@ -20,8 +20,9 @@ export default function CandidateDetail({ candidate }: Props) {
   const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
   const [filterApplied, setFilterApplied] = useState<'all' | 'applied' | 'not_applied'>('all');
   const [error, setError] = useState('');
+  const [resumePreviewUrl, setResumePreviewUrl] = useState<string | null>(null);
+  const [applyConfirmJob, setApplyConfirmJob] = useState<Job | null>(null);
 
-  // Stable ref so callbacks always use the latest token without needing it in deps
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
@@ -57,9 +58,7 @@ export default function CandidateDetail({ candidate }: Props) {
       if (Array.isArray(data)) {
         setAppliedJobIds(new Set(data.map((a: any) => a.job_id)));
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, [candidate.id, authHeaders]);
 
   useEffect(() => {
@@ -92,23 +91,39 @@ export default function CandidateDetail({ candidate }: Props) {
     }
   };
 
-  const handleApply = async (jobId: string) => {
-    try {
-      const res = await fetch('/api/applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ candidate_id: candidate.id, job_id: jobId })
-      });
-      if (res.ok) {
-        setAppliedJobIds(prev => new Set([...prev, jobId]));
-      }
-    } catch {
-      /* ignore */
+  // Opens job URL in new tab and shows the "Did you apply?" confirmation popup
+  const handleApplyClick = (job: Job) => {
+    if (job.url) window.open(job.url, '_blank', 'noreferrer');
+    setApplyConfirmJob(job);
+  };
+
+  // Called from the confirmation popup
+  const handleConfirmApply = async (confirmed: boolean) => {
+    if (confirmed && applyConfirmJob) {
+      try {
+        const res = await fetch('/api/applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ candidate_id: candidate.id, job_id: applyConfirmJob.id })
+        });
+        if (res.ok) {
+          setAppliedJobIds(prev => new Set([...prev, applyConfirmJob.id]));
+          setFilterApplied('applied');
+        }
+      } catch { /* ignore */ }
     }
+    setApplyConfirmJob(null);
+  };
+
+  // Pick preview URL — use Google Docs viewer for non-PDFs
+  const getPreviewUrl = (url: string) => {
+    if (url.toLowerCase().includes('.pdf') || url.includes('application/pdf')) return url;
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
   };
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-5 gap-4">
+      {/* Candidate header */}
       <div className="bg-white rounded border border-green-100 p-4 shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
@@ -123,18 +138,17 @@ export default function CandidateDetail({ candidate }: Props) {
             </div>
           </div>
           {candidate.resume_url && (
-            <a
-              href={candidate.resume_url}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              onClick={() => setResumePreviewUrl(candidate.resume_url!)}
               className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-3 py-1.5 border border-green-200 rounded hover:bg-green-50"
             >
               <FileText className="w-3 h-3" /> Resume
-            </a>
+            </button>
           )}
         </div>
       </div>
 
+      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 bg-white border border-green-200 rounded px-3 py-2">
           <Calendar className="w-3.5 h-3.5 text-green-700" />
@@ -180,13 +194,82 @@ export default function CandidateDetail({ candidate }: Props) {
         jobs={jobs}
         loading={loadingJobs}
         appliedJobIds={appliedJobIds}
-        onApply={handleApply}
+        onApply={handleApplyClick}
         page={page}
         totalPages={totalPages}
         onPageChange={p => fetchJobs(p)}
         filterApplied={filterApplied}
         onFilterChange={setFilterApplied}
       />
+
+      {/* ── Resume Preview Modal ── */}
+      {resumePreviewUrl && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-green-200 w-full max-w-4xl h-[88vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-green-100 shrink-0">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-green-800 flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5" /> Resume — {candidate.name}
+              </h3>
+              <div className="flex items-center gap-3">
+                <a
+                  href={resumePreviewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-2.5 py-1 border border-green-200 rounded hover:bg-green-50"
+                >
+                  <ExternalLink className="w-3 h-3" /> Open in Tab
+                </a>
+                <button onClick={() => setResumePreviewUrl(null)} className="text-green-400 hover:text-green-800">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden rounded-b-lg">
+              <iframe
+                src={getPreviewUrl(resumePreviewUrl)}
+                className="w-full h-full border-0"
+                title="Resume Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Apply Confirmation Popup ── */}
+      {applyConfirmJob && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-green-200 w-full max-w-sm shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-green-100">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-green-800">Confirm Application</h3>
+              <button onClick={() => setApplyConfirmJob(null)} className="text-green-400 hover:text-green-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-sm text-green-900 font-medium mb-1">
+                Did you apply to this job?
+              </p>
+              <p className="text-xs text-green-600 mb-5">
+                <span className="font-semibold">{applyConfirmJob.title}</span> at <span className="font-semibold">{applyConfirmJob.company}</span>
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleConfirmApply(false)}
+                  className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded border border-green-300 text-green-700 hover:bg-green-50"
+                >
+                  No, Not Yet
+                </button>
+                <button
+                  onClick={() => handleConfirmApply(true)}
+                  className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded bg-green-700 text-white hover:bg-green-800"
+                >
+                  Yes, Applied!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
