@@ -15,6 +15,15 @@ function getCandidatesClient(token?: string) {
   );
 }
 
+// Admin client with service role key — bypasses email confirmation
+function getAdminClient() {
+  return createClient(
+    process.env.SUPABASE_URL || '',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
 // Jobs Supabase (read-only via anon key)
 const jobsDb = createClient(
   process.env.JOBS_SUPABASE_URL || '',
@@ -51,25 +60,31 @@ app.post('/api/auth/register', async (req, res) => {
     const { name, email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const { data, error } = await getCandidatesClient().auth.signUp({
+    const admin = getAdminClient();
+    // Create user with email already confirmed — no verification email sent
+    const { data: userData, error: createError } = await admin.auth.admin.createUser({
       email,
       password,
-      options: { data: { name: name || email.split('@')[0] } }
+      email_confirm: true,
+      user_metadata: { name: name || email.split('@')[0] }
     });
-    if (error) return res.status(400).json({ error: error.message });
-    if (!data.session) {
-      return res.status(400).json({
-        error: 'Check your email to confirm your account, then log in. (Or disable "Confirm email" in Supabase Auth settings to skip this step.)'
-      });
+
+    if (createError) return res.status(400).json({ error: createError.message });
+
+    // Sign in immediately to get a session
+    const { data: signInData, error: signInError } = await getCandidatesClient().auth.signInWithPassword({ email, password });
+    if (signInError || !signInData.session) {
+      return res.status(400).json({ error: 'Account created — please log in.' });
     }
 
     res.json({
       user: {
-        id: data.user!.id,
+        id: userData.user.id,
         name: name || email.split('@')[0],
         email
       },
-      token: data.session.access_token
+      token: signInData.session.access_token,
+      refresh_token: signInData.session.refresh_token
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Registration failed: ' + err.message });
@@ -90,10 +105,28 @@ app.post('/api/auth/login', async (req, res) => {
         name: data.user.user_metadata?.name || email.split('@')[0],
         email: data.user.email
       },
-      token: data.session.access_token
+      token: data.session.access_token,
+      refresh_token: data.session.refresh_token
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Login failed: ' + err.message });
+  }
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+    if (!refresh_token) return res.status(400).json({ error: 'refresh_token required' });
+
+    const { data, error } = await getCandidatesClient().auth.refreshSession({ refresh_token });
+    if (error || !data.session) return res.status(401).json({ error: 'Session expired, please log in again' });
+
+    res.json({
+      token: data.session.access_token,
+      refresh_token: data.session.refresh_token
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Refresh failed: ' + err.message });
   }
 });
 
