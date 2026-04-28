@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
@@ -9,6 +10,7 @@ import { useAuth } from '@/src/lib/AuthContext';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { login, user } = useAuth();
@@ -82,7 +84,12 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 border-green-300 font-medium tracking-widest" />
+              <div className="relative">
+                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 border-green-300 font-medium tracking-widest pr-10" />
+                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 hover:text-green-800">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <Button type="submit" className="w-full h-12 text-sm shadow-sm pt-3">LOGIN</Button>
             <Button type="button" onClick={handleDemoLogin} variant="secondary" className="w-full h-12 text-sm shadow-sm pt-3 mt-4">DEMO LOGIN (NO CREDS)</Button>
