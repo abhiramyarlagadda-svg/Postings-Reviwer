@@ -86,7 +86,20 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (error || !data) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const passwordMatch = await bcrypt.compare(password, data.password);
+    const isBcrypt = data.password?.startsWith('$2');
+    let passwordMatch: boolean;
+
+    if (isBcrypt) {
+      passwordMatch = await bcrypt.compare(password, data.password);
+    } else {
+      // Plain text password (stored before bcrypt was added) — compare directly then upgrade
+      passwordMatch = data.password === password;
+      if (passwordMatch) {
+        const newHash = await bcrypt.hash(password, 10);
+        await getDb().from('users').update({ password: newHash }).eq('id', data.id);
+      }
+    }
+
     if (!passwordMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     res.json({
