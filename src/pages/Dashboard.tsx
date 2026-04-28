@@ -11,6 +11,7 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'candidates' | 'jobs' | 'applications'>('candidates');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -38,17 +39,27 @@ export default function Dashboard() {
              <FileSignature className="w-3.5 h-3.5" /> Applications
           </button>
           
-          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold ml-2 sm:ml-4 relative group cursor-pointer shadow-sm border border-green-600">
-            {user?.name?.charAt(0).toUpperCase() || 'U'}
-            <div className="absolute right-0 top-10 w-48 bg-white border-2 border-green-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-50 text-green-900 overflow-hidden flex flex-col">
-                <div className="p-3 border-b border-green-100 bg-green-50">
-                  <p className="text-sm font-bold truncate">{user?.name || 'Demo User'}</p>
-                  <p className="text-[10px] text-green-600 uppercase tracking-widest truncate">{user?.email || 'demo@example.com'}</p>
+          <div className="relative ml-2 sm:ml-4">
+            <button
+              onClick={() => setProfileOpen(o => !o)}
+              className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold cursor-pointer shadow-sm border border-green-600 hover:bg-green-200 transition-colors"
+            >
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
+            </button>
+            {profileOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                <div className="absolute right-0 top-10 w-48 bg-white border-2 border-green-200 rounded-lg shadow-lg z-50 text-green-900 overflow-hidden flex flex-col">
+                  <div className="p-3 border-b border-green-100 bg-green-50">
+                    <p className="text-sm font-bold truncate">{user?.name || 'Demo User'}</p>
+                    <p className="text-[10px] text-green-600 uppercase tracking-widest truncate">{user?.email || 'demo@example.com'}</p>
+                  </div>
+                  <button className="flex items-center gap-2 text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-600 hover:bg-green-100 transition-colors" onClick={handleLogout}>
+                    <LogOut className="w-3 h-3" /> Logout
+                  </button>
                 </div>
-                <button className="flex items-center gap-2 text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-600 hover:bg-green-100 transition-colors" onClick={handleLogout}>
-                   <LogOut className="w-3 h-3" /> Logout
-                </button>
-            </div>
+              </>
+            )}
           </div>
         </nav>
       </header>
