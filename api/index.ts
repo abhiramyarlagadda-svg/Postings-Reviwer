@@ -4,12 +4,16 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
 
-// Candidates Supabase (full access via service role - server side only)
-const candidatesDb = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+// Base client (anon key, no user context) — used only for auth token validation + signUp/signIn
+function getCandidatesClient(token?: string) {
+  const opts: any = { auth: { autoRefreshToken: false, persistSession: false } };
+  if (token) opts.global = { headers: { Authorization: `Bearer ${token}` } };
+  return createClient(
+    process.env.SUPABASE_URL || '',
+    process.env.SUPABASE_ANON_KEY || '',
+    opts
+  );
+}
 
 // Jobs Supabase (read-only via anon key)
 const jobsDb = createClient(
@@ -32,10 +36,11 @@ const authenticate = async (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data, error } = await candidatesDb.auth.getUser(token);
+  const { data, error } = await getCandidatesClient().auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ error: 'Unauthorized' });
 
   req.user = data.user;
+  req.token = token;
   next();
 };
 
@@ -46,24 +51,25 @@ app.post('/api/auth/register', async (req, res) => {
     const { name, email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const { data: createData, error: createError } = await candidatesDb.auth.admin.createUser({
+    const { data, error } = await getCandidatesClient().auth.signUp({
       email,
       password,
-      email_confirm: true,
-      user_metadata: { name: name || email.split('@')[0] }
+      options: { data: { name: name || email.split('@')[0] } }
     });
-    if (createError) return res.status(400).json({ error: createError.message });
-
-    const { data: signInData, error: signInError } = await candidatesDb.auth.signInWithPassword({ email, password });
-    if (signInError) return res.status(500).json({ error: signInError.message });
+    if (error) return res.status(400).json({ error: error.message });
+    if (!data.session) {
+      return res.status(400).json({
+        error: 'Check your email to confirm your account, then log in. (Or disable "Confirm email" in Supabase Auth settings to skip this step.)'
+      });
+    }
 
     res.json({
       user: {
-        id: createData.user!.id,
+        id: data.user!.id,
         name: name || email.split('@')[0],
         email
       },
-      token: signInData.session?.access_token
+      token: data.session.access_token
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Registration failed: ' + err.message });
@@ -75,7 +81,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const { data, error } = await candidatesDb.auth.signInWithPassword({ email, password });
+    const { data, error } = await getCandidatesClient().auth.signInWithPassword({ email, password });
     if (error || !data.session) return res.status(401).json({ error: 'Invalid credentials' });
 
     res.json({
@@ -94,10 +100,10 @@ app.post('/api/auth/login', async (req, res) => {
 // ─── CANDIDATES ────────────────────────────────────────────────────────────────
 
 app.get('/api/candidates', authenticate, async (req: any, res) => {
-  const { data, error } = await candidatesDb
+  const db = getCandidatesClient(req.token);
+  const { data, error } = await db
     .from('candidates')
     .select('*')
-    .eq('user_id', req.user.id)
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -111,11 +117,13 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
       return res.status(400).json({ error: 'Name, technology, and country are required' });
     }
 
+    const db = getCandidatesClient(req.token);
+
     let resume_url: string | null = null;
     if (req.file) {
       const ext = req.file.originalname.split('.').pop() || 'pdf';
       const path = `${req.user.id}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await candidatesDb.storage
+      const { error: uploadError } = await db.storage
         .from('resumes')
         .upload(path, req.file.buffer, {
           contentType: req.file.mimetype,
@@ -123,7 +131,7 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
         });
 
       if (!uploadError) {
-        const { data: urlData } = candidatesDb.storage.from('resumes').getPublicUrl(path);
+        const { data: urlData } = db.storage.from('resumes').getPublicUrl(path);
         resume_url = urlData.publicUrl;
       }
     }
@@ -137,7 +145,7 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
       }
     }
 
-    const { data, error } = await candidatesDb
+    const { data, error } = await db
       .from('candidates')
       .insert({
         user_id: req.user.id,
@@ -214,10 +222,8 @@ app.get('/api/jobs', authenticate, async (req: any, res) => {
 
 app.get('/api/applications', authenticate, async (req: any, res) => {
   const { candidate_id } = req.query;
-  let query = candidatesDb
-    .from('applications')
-    .select('*')
-    .eq('user_id', req.user.id);
+  const db = getCandidatesClient(req.token);
+  let query = db.from('applications').select('*');
 
   if (candidate_id) query = query.eq('candidate_id', candidate_id);
 
@@ -231,7 +237,9 @@ app.post('/api/applications', authenticate, async (req: any, res) => {
     const { candidate_id, job_id } = req.body;
     if (!candidate_id || !job_id) return res.status(400).json({ error: 'candidate_id and job_id required' });
 
-    const { data: existing } = await candidatesDb
+    const db = getCandidatesClient(req.token);
+
+    const { data: existing } = await db
       .from('applications')
       .select('id')
       .eq('candidate_id', candidate_id)
@@ -240,7 +248,7 @@ app.post('/api/applications', authenticate, async (req: any, res) => {
 
     if (existing) return res.status(400).json({ error: 'Already applied' });
 
-    const { data, error } = await candidatesDb
+    const { data, error } = await db
       .from('applications')
       .insert({
         user_id: req.user.id,
