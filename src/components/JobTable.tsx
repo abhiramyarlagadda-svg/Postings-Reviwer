@@ -48,7 +48,7 @@ export default function JobTable({
           <button
             key={f}
             onClick={() => onFilterChange(f)}
-            className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded transition-colors ${
+            className={`text-xs font-bold uppercase tracking-widest px-4 py-2 rounded transition-colors ${
               filterApplied === f
                 ? 'bg-green-700 text-white'
                 : 'bg-white text-green-700 border border-green-200 hover:bg-green-50'
@@ -61,24 +61,24 @@ export default function JobTable({
 
       <div className="flex-1 overflow-y-auto bg-white border border-green-100 rounded">
         {loading ? (
-          <div className="p-10 text-center text-green-500 text-xs">Loading jobs...</div>
+          <div className="p-10 text-center text-green-500 text-sm">Loading jobs...</div>
         ) : items.length === 0 ? (
-          <div className="p-10 text-center text-green-400 text-xs">No jobs to show</div>
+          <div className="p-10 text-center text-green-400 text-sm">No jobs to show</div>
         ) : (
-          <table className="w-full text-xs">
+          <table className="w-full">
             <thead className="bg-green-50 sticky top-0 z-10">
               <tr className="text-left">
-                <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Title</th>
-                <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Company</th>
-                <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Location</th>
-                <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Posted</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Title</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Company</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Location</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Posted</th>
                 {analysed && (
                   <>
-                    <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Score</th>
-                    <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Status</th>
+                    <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Score</th>
+                    <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Status</th>
                   </>
                 )}
-                <th className="px-3 py-2.5 font-bold text-green-800 uppercase tracking-wider text-[10px]">Apply</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Apply</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-green-50">
@@ -91,28 +91,28 @@ export default function JobTable({
                 return (
                   <React.Fragment key={j.id}>
                     <tr className="hover:bg-green-50/40">
-                      <td className="px-3 py-2.5 text-green-900 font-medium">
+                      <td className="px-4 py-3 text-green-900 font-semibold text-sm">
                         {j.url ? (
                           <a href={j.url} target="_blank" rel="noreferrer" className="hover:text-green-700 hover:underline">{j.title}</a>
                         ) : j.title}
                       </td>
-                      <td className="px-3 py-2.5 text-green-700">{j.company}</td>
-                      <td className="px-3 py-2.5 text-green-600">{j.is_remote ? 'Remote' : (j.location || j.country || '-')}</td>
-                      <td className="px-3 py-2.5 text-green-500 text-[11px]">
+                      <td className="px-4 py-3 text-green-700 font-medium text-sm">{j.company}</td>
+                      <td className="px-4 py-3 text-green-600 text-sm">{j.is_remote ? 'Remote' : (j.location || j.country || '-')}</td>
+                      <td className="px-4 py-3 text-green-500 text-xs">
                         {j.posted_at ? new Date(j.posted_at).toLocaleDateString() : '-'}
                       </td>
                       {analysed && (
                         <>
-                          <td className="px-3 py-2.5 font-bold text-green-800">{r.overallScore}%</td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-4 py-3 font-bold text-green-800 text-sm">{r.overallScore}%</td>
+                          <td className="px-4 py-3">
                             {r.suitable ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700 border border-green-300">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-green-100 text-green-700 border border-green-300">
                                 Relevant
                               </span>
                             ) : (
                               <button
                                 onClick={() => toggle(j.id)}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
                               >
                                 Not Suitable {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>
@@ -120,11 +120,11 @@ export default function JobTable({
                           </td>
                         </>
                       )}
-                      <td className="px-3 py-2.5">
+                      <td className="px-4 py-3">
                         <button
                           onClick={() => !isApplied && onApply(j)}
                           disabled={isApplied}
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors ${
+                          className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors ${
                             isApplied
                               ? 'bg-green-50 text-green-600 cursor-default border border-green-200'
                               : 'bg-green-700 text-white hover:bg-green-800'
@@ -136,8 +136,8 @@ export default function JobTable({
                     </tr>
                     {analysed && isExpanded && r.reasons.length > 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-2.5 bg-red-50/40 border-t border-red-100">
-                          <ul className="text-[11px] text-red-700 space-y-1">
+                        <td colSpan={7} className="px-4 py-3 bg-red-50/40 border-t border-red-100">
+                          <ul className="text-xs text-red-700 space-y-1">
                             {r.reasons.map((reason, i) => (
                               <li key={i}>• {reason}</li>
                             ))}
@@ -155,7 +155,7 @@ export default function JobTable({
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-3">
-          <span className="text-[10px] text-green-600 uppercase tracking-widest">
+          <span className="text-xs text-green-600 uppercase tracking-widest">
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-1.5">

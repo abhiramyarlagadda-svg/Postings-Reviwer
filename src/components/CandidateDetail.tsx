@@ -124,25 +124,25 @@ export default function CandidateDetail({ candidate }: Props) {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-5 gap-4">
       {/* Candidate header */}
-      <div className="bg-white rounded border border-green-100 p-4 shadow-sm">
+      <div className="bg-white rounded border border-green-100 p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold text-green-900 truncate">{candidate.name}</h2>
-            <div className="flex items-center gap-4 mt-1.5 flex-wrap">
-              <span className="text-[10px] text-green-700 font-bold uppercase tracking-widest bg-green-50 px-2 py-0.5 rounded">
+            <h2 className="text-2xl font-bold text-green-900 truncate">{candidate.name}</h2>
+            <div className="flex items-center gap-4 mt-2 flex-wrap">
+              <span className="text-xs text-green-700 font-bold uppercase tracking-widest bg-green-100 px-2.5 py-1 rounded border border-green-200">
                 {candidate.technology}
               </span>
-              <span className="text-[11px] text-green-600">{candidate.country}</span>
-              <span className="text-[11px] text-green-600">{candidate.experience_years} yrs experience</span>
-              {candidate.email && <span className="text-[11px] text-green-500">{candidate.email}</span>}
+              <span className="text-sm font-medium text-green-700">{candidate.country}</span>
+              <span className="text-sm font-medium text-green-700">{candidate.experience_years} yrs experience</span>
+              {candidate.email && <span className="text-sm text-green-500">{candidate.email}</span>}
             </div>
           </div>
           {candidate.resume_url && (
             <button
               onClick={() => setResumePreviewUrl(candidate.resume_url!)}
-              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-3 py-1.5 border border-green-200 rounded hover:bg-green-50"
+              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-3 py-2 border border-green-200 rounded hover:bg-green-50"
             >
-              <FileText className="w-3 h-3" /> Resume
+              <FileText className="w-3.5 h-3.5" /> Resume
             </button>
           )}
         </div>
@@ -162,7 +162,7 @@ export default function CandidateDetail({ candidate }: Props) {
 
         <button
           onClick={() => fetchJobs(1)}
-          className="text-[10px] font-bold uppercase tracking-widest px-3 py-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
+          className="text-xs font-bold uppercase tracking-widest px-3 py-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
         >
           Apply Filter
         </button>
@@ -170,14 +170,14 @@ export default function CandidateDetail({ candidate }: Props) {
         <button
           onClick={handleAnalyse}
           disabled={analysing || jobs.length === 0}
-          className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Zap className="w-3.5 h-3.5" />
           {analysing ? 'Analysing...' : 'AI Analyse'}
         </button>
 
         {results && (
-          <span className="text-[10px] text-green-700 uppercase tracking-widest font-bold">
+          <span className="text-xs text-green-700 uppercase tracking-widest font-bold">
             {results.filter(r => r.suitable).length} relevant / {results.length} total
           </span>
         )}
