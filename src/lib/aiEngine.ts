@@ -34,20 +34,21 @@ export interface JobResult {
   overallScore: number;
 }
 
-// Map a free-form experience_level string to required years (rough estimate)
+// Map a free-form experience_level string to required years
 function inferRequiredYears(level?: string): number {
   if (!level) return 0;
   const l = level.toLowerCase();
-  if (/(intern|fresher|entry|junior|0\s*-\s*1|0-2)/.test(l)) return 1;
-  if (/(mid|intermediate|2\s*-\s*5|3\s*-\s*5)/.test(l)) return 3;
-  if (/(senior|sr\.?\s|5\+|5\s*-\s*8)/.test(l)) return 6;
-  if (/(lead|principal|staff|architect|10\+|director)/.test(l)) return 10;
-  const m = l.match(/(\d+)\s*\+?\s*year/);
-  if (m) return parseInt(m[1]);
+  if (/(intern|fresher|entry|junior|graduate|trainee|0\s*-\s*[12]|0-2)/.test(l)) return 1;
+  if (/(mid|intermediate|associate|2\s*-\s*[45]|3\s*-\s*5)/.test(l)) return 3;
+  if (/(senior|sr\.?\s|5\+|5\s*-\s*[89]|experienced)/.test(l)) return 5;
+  if (/(lead|principal|staff|architect|10\+|director|head\s+of|vp|8\+|7\+)/.test(l)) return 8;
+  const rangeMatch = l.match(/(\d+)\s*[-–]\s*(\d+)/);
+  if (rangeMatch) return parseInt(rangeMatch[1]);
+  const plusMatch = l.match(/(\d+)\s*\+?\s*year/);
+  if (plusMatch) return parseInt(plusMatch[1]);
   return 0;
 }
 
-// Visa sponsorship is not a column in the schema — derive from description/tags
 function inferVisaSponsorship(job: Job): boolean {
   const text = `${job.description || ''} ${(job.tags || []).join(' ')}`.toLowerCase();
   if (/no\s+(visa|sponsorship)/.test(text)) return false;
@@ -68,33 +69,40 @@ export function applyRedFlagRules(candidate: Candidate, job: Job): { suitable: b
   const reasons: string[] = [];
   let suitable = true;
 
-  // 1. Same Company Conflict
+  // 1. Same company conflict
   const companies = Array.isArray(candidate.companies_worked) ? candidate.companies_worked : [];
   const jobCompany = (job.company || '').toLowerCase().trim();
   if (jobCompany && companies.some(c => {
     const cc = (c || '').toLowerCase().trim();
     return cc && (cc === jobCompany || cc.includes(jobCompany) || jobCompany.includes(cc));
   })) {
-    reasons.push('Candidate previously worked at this company');
+    reasons.push(`Candidate previously worked at ${job.company} — company conflict`);
     suitable = false;
   }
 
-  // 2. Experience Mismatch
+  // 2. Experience checks
   const requiredYears = inferRequiredYears(job.experience_level);
-  if (requiredYears > 0 && candidate.experience_years < requiredYears - 2) {
-    reasons.push(`Experience required (${job.experience_level}) is higher than candidate profile (${candidate.experience_years} yrs)`);
-    suitable = false;
+  if (requiredYears > 0) {
+    const gap = requiredYears - candidate.experience_years;
+    if (gap > 2) {
+      reasons.push(`Significant experience gap — job requires ~${requiredYears} yrs (${job.experience_level}), candidate has ${candidate.experience_years} yrs`);
+      suitable = false;
+    } else if (gap > 0) {
+      reasons.push(`Slightly below experience requirement — needs ~${requiredYears} yrs (${job.experience_level}), candidate has ${candidate.experience_years} yrs`);
+      // soft warning — doesn't fail suitability on its own
+    }
   }
 
-  // 3 & 4. Location / visa
+  // 3. Location / visa
   const locationOk = locationMatches(candidate.country, job);
   if (!locationOk) {
     const hasVisa = inferVisaSponsorship(job);
+    const jobLoc = job.location || job.country || 'a different location';
     if (!hasVisa) {
-      reasons.push('Location mismatch and no visa sponsorship indicated');
+      reasons.push(`Location mismatch — candidate is in ${candidate.country}, job is in ${jobLoc} with no visa sponsorship`);
       suitable = false;
     } else {
-      reasons.push('Location mismatch (visa sponsorship may be available)');
+      reasons.push(`Location mismatch — candidate is in ${candidate.country}, job is in ${jobLoc} (visa sponsorship may be available)`);
     }
   }
 
@@ -102,7 +110,8 @@ export function applyRedFlagRules(candidate: Candidate, job: Job): { suitable: b
 }
 
 export function calculateScores(candidate: Candidate, job: Job, skillMatchScore: number): JobResult {
-  const { suitable, reasons } = applyRedFlagRules(candidate, job);
+  const { suitable: rulesSuitable, reasons } = applyRedFlagRules(candidate, job);
+  let suitable = rulesSuitable;
 
   const requiredYears = inferRequiredYears(job.experience_level);
   const experienceScore = requiredYears === 0
@@ -111,6 +120,15 @@ export function calculateScores(candidate: Candidate, job: Job, skillMatchScore:
 
   const locOk = locationMatches(candidate.country, job);
   const locationScore = locOk ? 100 : (inferVisaSponsorship(job) ? 50 : 0);
+
+  // 4. Low skill match from AI — always evaluated and added if low
+  if (skillMatchScore < 50) {
+    const jobSkills = Array.isArray(job.skills) && job.skills.length > 0
+      ? ` (requires: ${job.skills.slice(0, 4).join(', ')})`
+      : '';
+    reasons.push(`Low skill match — AI scored ${skillMatchScore}% alignment${jobSkills}`);
+    if (skillMatchScore < 35) suitable = false;
+  }
 
   const overallScore = Math.round((skillMatchScore + experienceScore + locationScore) / 3);
 
