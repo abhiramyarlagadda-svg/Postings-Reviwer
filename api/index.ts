@@ -1,14 +1,14 @@
-import 'dotenv/config';
 import express from 'express';
 import multer from 'multer';
-import * as pdfParseModule from 'pdf-parse';
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
 import * as xlsx from 'xlsx';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import { GoogleGenAI } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Lazy init to avoid crash when GEMINI_API_KEY is not set at cold start
+function getAI() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+}
 
 const demoUserId = 'demo-user-id-5555-4444';
 let db = {
@@ -116,6 +116,7 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
     if (req.file) {
       if (req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf')) {
         try {
+          const pdfParse = (await import('pdf-parse')).default;
           const parsed = await pdfParse(req.file.buffer);
           resumeText = parsed.text;
         } catch (e: any) {
@@ -146,6 +147,7 @@ app.post('/api/jobs/preview', authenticate, upload.single('file'), async (req: a
     let documentText = '';
     const originalName = req.file.originalname.toLowerCase();
     if (originalName.endsWith('.pdf')) {
+      const pdfParse = (await import('pdf-parse')).default;
       const parsed = await pdfParse(req.file.buffer);
       documentText = parsed.text;
     } else {
@@ -166,7 +168,7 @@ Return a structured JSON array of objects. Each object must have exactly these f
 Here is the document content:
 ${documentText.length > 30000 ? documentText.substring(0, 30000) : documentText}`;
 
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: { responseMimeType: 'application/json', temperature: 0.1 }
