@@ -185,10 +185,11 @@ app.get('/api/jobs', authenticate, async (req: any, res) => {
     }
 
     if (technology) {
-      const tech = String(technology);
-      query = query.or(
-        `title.ilike.%${tech}%,description.ilike.%${tech}%,skills.cs.{${tech}}`
-      );
+      // Strip characters that would break PostgREST or() syntax
+      const tech = String(technology).replace(/[,()%{}*]/g, ' ').trim();
+      if (tech) {
+        query = query.or(`title.ilike.%${tech}%,description.ilike.%${tech}%`);
+      }
     }
 
     const { data, error, count } = await query
