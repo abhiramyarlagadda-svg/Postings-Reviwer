@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Zap, FileText } from 'lucide-react';
+import { useAuth } from '@/src/lib/AuthContext';
 import { calculateScores, sortResults, type Candidate, type Job, type JobResult } from '@/src/lib/aiEngine';
 import JobTable from './JobTable';
 
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function CandidateDetail({ candidate }: Props) {
+  const { token } = useAuth();
   const [dateFrom, setDateFrom] = useState('');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
@@ -19,8 +21,10 @@ export default function CandidateDetail({ candidate }: Props) {
   const [filterApplied, setFilterApplied] = useState<'all' | 'applied' | 'not_applied'>('all');
   const [error, setError] = useState('');
 
-  const token = localStorage.getItem('token');
-  const authHeaders = { Authorization: `Bearer ${token}` };
+  // Stable ref so callbacks always use the latest token without needing it in deps
+  const tokenRef = useRef(token);
+  useEffect(() => { tokenRef.current = token; }, [token]);
+  const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
 
   const fetchJobs = useCallback(async (p = 1) => {
     setLoadingJobs(true);
@@ -31,7 +35,7 @@ export default function CandidateDetail({ candidate }: Props) {
       if (dateFrom) params.set('date_from', dateFrom);
       if (candidate.technology) params.set('technology', candidate.technology);
 
-      const res = await fetch(`/api/jobs?${params}`, { headers: authHeaders });
+      const res = await fetch(`/api/jobs?${params}`, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch jobs');
 
@@ -44,11 +48,11 @@ export default function CandidateDetail({ candidate }: Props) {
     } finally {
       setLoadingJobs(false);
     }
-  }, [candidate.technology, dateFrom]);
+  }, [candidate.technology, dateFrom, authHeaders]);
 
   const fetchApplications = useCallback(async () => {
     try {
-      const res = await fetch(`/api/applications?candidate_id=${candidate.id}`, { headers: authHeaders });
+      const res = await fetch(`/api/applications?candidate_id=${candidate.id}`, { headers: authHeaders() });
       const data = await res.json();
       if (Array.isArray(data)) {
         setAppliedJobIds(new Set(data.map((a: any) => a.job_id)));
@@ -56,7 +60,7 @@ export default function CandidateDetail({ candidate }: Props) {
     } catch {
       /* ignore */
     }
-  }, [candidate.id]);
+  }, [candidate.id, authHeaders]);
 
   useEffect(() => {
     fetchJobs(1);
@@ -70,7 +74,7 @@ export default function CandidateDetail({ candidate }: Props) {
     try {
       const res = await fetch('/api/ai/analyse', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ candidate, jobs })
       });
       const data = await res.json();
@@ -92,7 +96,7 @@ export default function CandidateDetail({ candidate }: Props) {
     try {
       const res = await fetch('/api/applications', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ candidate_id: candidate.id, job_id: jobId })
       });
       if (res.ok) {
