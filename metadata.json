@@ -1,0 +1,6 @@
+{
+  "name": "Postings Reviewer",
+  "description": "AI-powered recruiter assistant that matches candidates to job postings by analyzing resumes and generating reasoning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
