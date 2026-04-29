@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import type { Job, JobResult } from '@/src/lib/aiEngine';
 
 interface Props {
   results: JobResult[] | null;
   jobs: Job[];
   loading: boolean;
-  appliedJobIds: Set<string>;
-  onApply: (job: Job) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
-  filterApplied: 'all' | 'applied';
-  onFilterChange: (f: 'all' | 'applied') => void;
+  filterApplied: 'all' | 'relevant' | 'not_suitable';
+  onFilterChange: (f: 'all' | 'relevant' | 'not_suitable') => void;
 }
 
 export default function JobTable({
-  results, jobs, loading, appliedJobIds, onApply,
+  results, jobs, loading,
   page, totalPages, onPageChange, filterApplied, onFilterChange
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -31,33 +29,34 @@ export default function JobTable({
     });
   };
 
-  // ALL hides applied jobs; APPLIED shows only applied jobs
-  const passesFilter = (jobId: string) => {
-    if (filterApplied === 'applied') return appliedJobIds.has(jobId);
-    return !appliedJobIds.has(jobId);
-  };
-
   const items: (JobResult | { job: Job })[] = analysed
-    ? results!.filter(r => passesFilter(r.job.id))
-    : jobs.filter(j => passesFilter(j.id)).map(j => ({ job: j }));
+    ? results!.filter(r => {
+        if (filterApplied === 'relevant') return r.suitable;
+        if (filterApplied === 'not_suitable') return !r.suitable;
+        return true;
+      })
+    : jobs.map(j => ({ job: j }));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex items-center gap-2 mb-3">
-        {(['all', 'applied'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => onFilterChange(f)}
-            className={`text-xs font-bold uppercase tracking-widest px-4 py-2 rounded transition-colors ${
-              filterApplied === f
-                ? 'bg-green-700 text-white'
-                : 'bg-white text-green-700 border border-green-200 hover:bg-green-50'
-            }`}
-          >
-            {f === 'all' ? 'All Jobs' : 'Applied'}
-          </button>
-        ))}
-      </div>
+      {/* Filter tabs — only show relevance tabs after analysis */}
+      {analysed && (
+        <div className="flex items-center gap-2 mb-3">
+          {(['all', 'relevant', 'not_suitable'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => onFilterChange(f)}
+              className={`text-xs font-bold uppercase tracking-widest px-4 py-2 rounded transition-colors ${
+                filterApplied === f
+                  ? 'bg-green-700 text-white'
+                  : 'bg-white text-green-700 border border-green-200 hover:bg-green-50'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'relevant' ? 'Relevant' : 'Not Suitable'}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto bg-white border border-green-100 rounded">
         {loading ? (
@@ -78,28 +77,27 @@ export default function JobTable({
                     <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Status</th>
                   </>
                 )}
-                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Apply</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Link</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-green-50">
               {items.map(item => {
                 const r = item as JobResult;
                 const j = item.job;
-                const isApplied = appliedJobIds.has(j.id);
                 const isExpanded = expanded.has(j.id);
 
                 return (
                   <React.Fragment key={j.id}>
                     <tr className="hover:bg-green-50/40">
-                      <td className="px-4 py-3 text-green-900 font-semibold text-sm">
-                        {j.url ? (
-                          <a href={j.url} target="_blank" rel="noreferrer" className="hover:text-green-700 hover:underline">{j.title}</a>
-                        ) : j.title}
+                      <td className="px-4 py-3 text-green-900 font-semibold text-sm max-w-[260px]">
+                        {j.title}
                       </td>
                       <td className="px-4 py-3 text-green-700 font-medium text-sm">{j.company}</td>
-                      <td className="px-4 py-3 text-green-600 text-sm">{j.is_remote ? 'Remote' : (j.location || j.country || '-')}</td>
+                      <td className="px-4 py-3 text-green-600 text-sm">
+                        {j.is_remote ? 'Remote' : (j.location || j.country || '—')}
+                      </td>
                       <td className="px-4 py-3 text-green-500 text-xs">
-                        {j.posted_at ? new Date(j.posted_at).toLocaleDateString() : '-'}
+                        {j.posted_at ? new Date(j.posted_at).toLocaleDateString() : '—'}
                       </td>
                       {analysed && (
                         <>
@@ -121,17 +119,18 @@ export default function JobTable({
                         </>
                       )}
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => !isApplied && onApply(j)}
-                          disabled={isApplied}
-                          className={`text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors ${
-                            isApplied
-                              ? 'bg-green-50 text-green-600 cursor-default border border-green-200'
-                              : 'bg-green-700 text-white hover:bg-green-800'
-                          }`}
-                        >
-                          {isApplied ? 'Applied' : 'Apply'}
-                        </button>
+                        {j.url ? (
+                          <a
+                            href={j.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded bg-green-700 text-white hover:bg-green-800"
+                          >
+                            <ExternalLink className="w-3 h-3" /> View Job
+                          </a>
+                        ) : (
+                          <span className="text-xs text-green-300">No link</span>
+                        )}
                       </td>
                     </tr>
                     {analysed && isExpanded && r.reasons.length > 0 && (
@@ -153,7 +152,7 @@ export default function JobTable({
         )}
       </div>
 
-      {totalPages > 1 && (
+      {totalPages > 1 && !analysed && (
         <div className="flex items-center justify-between pt-3">
           <span className="text-xs text-green-600 uppercase tracking-widest">
             Page {page} of {totalPages}

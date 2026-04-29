@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Zap, FileText, X, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import { Calendar, Zap, FileText, X, ExternalLink, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { calculateScores, sortResults, type Candidate, type Job, type JobResult } from '@/src/lib/aiEngine';
 import JobTable from './JobTable';
@@ -18,13 +18,12 @@ export default function CandidateDetail({ candidate }: Props) {
   const [totalPages, setTotalPages] = useState(1);
   const [analysing, setAnalysing] = useState(false);
   const [results, setResults] = useState<JobResult[] | null>(null);
-  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
-  const [filterApplied, setFilterApplied] = useState<'all' | 'applied'>('all');
+  const [filterApplied, setFilterApplied] = useState<'all' | 'relevant' | 'not_suitable'>('all');
   const [error, setError] = useState('');
   const [resumePreviewUrl, setResumePreviewUrl] = useState<string | null>(null);
-  const [applyConfirmJob, setApplyConfirmJob] = useState<Job | null>(null);
   const [showUploadJobs, setShowUploadJobs] = useState(false);
   const [uploadedSource, setUploadedSource] = useState(false);
+  const [savedCount, setSavedCount] = useState<number | null>(null);
 
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
@@ -33,7 +32,9 @@ export default function CandidateDetail({ candidate }: Props) {
   const fetchJobs = useCallback(async (p = 1) => {
     setLoadingJobs(true);
     setResults(null);
+    setSavedCount(null);
     setError('');
+    setUploadedSource(false);
     try {
       const params = new URLSearchParams({ page: String(p), limit: '20' });
       if (dateFrom) params.set('date_from', dateFrom);
@@ -54,26 +55,15 @@ export default function CandidateDetail({ candidate }: Props) {
     }
   }, [candidate.technology, dateFrom, authHeaders]);
 
-  const fetchApplications = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/applications?candidate_id=${candidate.id}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setAppliedJobIds(new Set(data.map((a: any) => a.job_id)));
-      }
-    } catch { /* ignore */ }
-  }, [candidate.id, authHeaders]);
-
-  useEffect(() => {
-    fetchJobs(1);
-    fetchApplications();
-  }, [candidate.id]);
+  useEffect(() => { fetchJobs(1); }, [candidate.id]);
 
   const handleAnalyse = async () => {
     if (jobs.length === 0) return;
     setAnalysing(true);
     setError('');
+    setSavedCount(null);
     try {
+      // Step 1: Get AI scores
       const res = await fetch('/api/ai/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -86,7 +76,27 @@ export default function CandidateDetail({ candidate }: Props) {
       const analysed = jobs.map((job, i) =>
         calculateScores(candidate, job, scoreMap.get(i) ?? 50)
       );
-      setResults(sortResults(analysed));
+      const sorted = sortResults(analysed);
+      setResults(sorted);
+      setFilterApplied('all');
+
+      // Step 2: Auto-save all results to DB with relevant/irrelevant status
+      const saveRes = await fetch('/api/applications/analyse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          candidate_id: candidate.id,
+          results: sorted.map(r => ({
+            job_id: r.job.id,
+            status: r.suitable ? 'relevant' : 'irrelevant',
+            score: r.overallScore
+          }))
+        })
+      });
+      if (saveRes.ok) {
+        const saved = await saveRes.json();
+        setSavedCount(saved.saved);
+      }
     } catch (e: any) {
       setError('AI analysis failed: ' + e.message);
     } finally {
@@ -94,41 +104,16 @@ export default function CandidateDetail({ candidate }: Props) {
     }
   };
 
-  // Load jobs from Excel upload — replaces current list, clears analysis
   const handleJobsUploaded = (uploaded: Job[]) => {
     setJobs(uploaded);
     setResults(null);
+    setSavedCount(null);
     setError('');
     setPage(1);
     setTotalPages(1);
     setUploadedSource(true);
   };
 
-  // Opens job URL in new tab and shows the "Did you apply?" confirmation popup
-  const handleApplyClick = (job: Job) => {
-    if (job.url) window.open(job.url, '_blank', 'noreferrer');
-    setApplyConfirmJob(job);
-  };
-
-  // Called from the confirmation popup
-  const handleConfirmApply = async (confirmed: boolean) => {
-    if (confirmed && applyConfirmJob) {
-      try {
-        const res = await fetch('/api/applications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders() },
-          body: JSON.stringify({ candidate_id: candidate.id, job_id: applyConfirmJob.id })
-        });
-        if (res.ok) {
-          setAppliedJobIds(prev => new Set([...prev, applyConfirmJob.id]));
-          setFilterApplied('applied');
-        }
-      } catch { /* ignore */ }
-    }
-    setApplyConfirmJob(null);
-  };
-
-  // Pick preview URL — use Google Docs viewer for non-PDFs
   const getPreviewUrl = (url: string) => {
     if (url.toLowerCase().includes('.pdf') || url.includes('application/pdf')) return url;
     return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
@@ -161,7 +146,7 @@ export default function CandidateDetail({ candidate }: Props) {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 bg-white border border-green-200 rounded px-3 py-2">
           <Calendar className="w-3.5 h-3.5 text-green-700" />
@@ -206,6 +191,11 @@ export default function CandidateDetail({ candidate }: Props) {
             {results.filter(r => r.suitable).length} relevant / {results.length} total
           </span>
         )}
+        {savedCount !== null && (
+          <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+            <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved to database
+          </span>
+        )}
       </div>
 
       {error && (
@@ -218,8 +208,6 @@ export default function CandidateDetail({ candidate }: Props) {
         results={results}
         jobs={jobs}
         loading={loadingJobs}
-        appliedJobIds={appliedJobIds}
-        onApply={handleApplyClick}
         page={page}
         totalPages={totalPages}
         onPageChange={p => fetchJobs(p)}
@@ -227,7 +215,7 @@ export default function CandidateDetail({ candidate }: Props) {
         onFilterChange={setFilterApplied}
       />
 
-      {/* ── Upload Jobs Modal ── */}
+      {/* Upload Jobs Modal */}
       {showUploadJobs && (
         <UploadJobsModal
           onClose={() => setShowUploadJobs(false)}
@@ -235,7 +223,7 @@ export default function CandidateDetail({ candidate }: Props) {
         />
       )}
 
-      {/* ── Resume Preview Modal ── */}
+      {/* Resume Preview Modal */}
       {resumePreviewUrl && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg border border-green-200 w-full max-w-4xl h-[88vh] flex flex-col shadow-2xl">
@@ -248,7 +236,7 @@ export default function CandidateDetail({ candidate }: Props) {
                   href={resumePreviewUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-2.5 py-1 border border-green-200 rounded hover:bg-green-50"
+                  className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-green-700 hover:text-green-900 px-2.5 py-1 border border-green-200 rounded hover:bg-green-50"
                 >
                   <ExternalLink className="w-3 h-3" /> Open in Tab
                 </a>
@@ -263,42 +251,6 @@ export default function CandidateDetail({ candidate }: Props) {
                 className="w-full h-full border-0"
                 title="Resume Preview"
               />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Apply Confirmation Popup ── */}
-      {applyConfirmJob && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border border-green-200 w-full max-w-sm shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-green-100">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-green-800">Confirm Application</h3>
-              <button onClick={() => setApplyConfirmJob(null)} className="text-green-400 hover:text-green-800">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-5 py-5">
-              <p className="text-sm text-green-900 font-medium mb-1">
-                Did you apply to this job?
-              </p>
-              <p className="text-xs text-green-600 mb-5">
-                <span className="font-semibold">{applyConfirmJob.title}</span> at <span className="font-semibold">{applyConfirmJob.company}</span>
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleConfirmApply(false)}
-                  className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded border border-green-300 text-green-700 hover:bg-green-50"
-                >
-                  No, Not Yet
-                </button>
-                <button
-                  onClick={() => handleConfirmApply(true)}
-                  className="flex-1 text-[10px] font-bold uppercase tracking-widest py-2.5 rounded bg-green-700 text-white hover:bg-green-800"
-                >
-                  Yes, Applied!
-                </button>
-              </div>
             </div>
           </div>
         </div>

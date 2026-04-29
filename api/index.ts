@@ -228,32 +228,30 @@ app.get('/api/applications', authenticate, async (req: any, res) => {
   res.json(data || []);
 });
 
-app.post('/api/applications', authenticate, async (req: any, res) => {
+app.post('/api/applications/analyse', authenticate, async (req: any, res) => {
   try {
-    const { candidate_id, job_id } = req.body;
-    if (!candidate_id || !job_id) return res.status(400).json({ error: 'candidate_id and job_id required' });
+    const { candidate_id, results } = req.body;
+    if (!candidate_id || !Array.isArray(results) || results.length === 0) {
+      return res.status(400).json({ error: 'candidate_id and results array required' });
+    }
 
     const db = getDb();
+    const records = results.map((r: any) => ({
+      user_id: req.user.id,
+      candidate_id,
+      job_id: String(r.job_id),
+      status: r.status,   // 'relevant' | 'irrelevant'
+      score: r.score ?? null
+    }));
 
-    const { data: existing } = await db
+    const { error } = await db
       .from('applications')
-      .select('id')
-      .eq('candidate_id', candidate_id)
-      .eq('job_id', job_id)
-      .maybeSingle();
-
-    if (existing) return res.status(400).json({ error: 'Already applied' });
-
-    const { data, error } = await db
-      .from('applications')
-      .insert({ user_id: req.user.id, candidate_id, job_id, status: 'applied' })
-      .select()
-      .single();
+      .upsert(records, { onConflict: 'candidate_id,job_id' });
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    res.json({ saved: records.length });
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to apply: ' + err.message });
+    res.status(500).json({ error: 'Failed to save analysis: ' + err.message });
   }
 });
 
