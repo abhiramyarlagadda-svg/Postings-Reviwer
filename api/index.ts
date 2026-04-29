@@ -240,8 +240,16 @@ app.post('/api/applications/analyse', authenticate, async (req: any, res) => {
       user_id: req.user.id,
       candidate_id,
       job_id: String(r.job_id),
-      status: r.status,   // 'relevant' | 'irrelevant'
-      score: r.score ?? null
+      status: r.status,
+      score: r.score ?? null,
+      skill_match_score: r.skill_match_score ?? null,
+      experience_score: r.experience_score ?? null,
+      location_score: r.location_score ?? null,
+      reasons: r.reasons ?? [],
+      job_title: r.job_title ?? null,
+      job_company: r.job_company ?? null,
+      job_location: r.job_location ?? null,
+      job_url: r.job_url ?? null
     }));
 
     const { error } = await db

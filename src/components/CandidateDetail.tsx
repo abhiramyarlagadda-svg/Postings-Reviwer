@@ -24,12 +24,15 @@ export default function CandidateDetail({ candidate }: Props) {
   const [showUploadJobs, setShowUploadJobs] = useState(false);
   const [uploadedSource, setUploadedSource] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [analysedJobIds, setAnalysedJobIds] = useState<Set<string>>(new Set());
+  const [hiddenJobsCount, setHiddenJobsCount] = useState(0);
 
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
 
-  const fetchJobs = useCallback(async (p = 1) => {
+  // Fetch jobs, filtering out already-analysed ones for this candidate
+  const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>) => {
     setLoadingJobs(true);
     setResults(null);
     setSavedCount(null);
@@ -44,7 +47,12 @@ export default function CandidateDetail({ candidate }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch jobs');
 
-      setJobs(data.jobs || []);
+      const exclude = excludeIds ?? analysedJobIds;
+      const allJobs: Job[] = data.jobs || [];
+      const filtered = allJobs.filter(j => !exclude.has(j.id));
+
+      setJobs(filtered);
+      setHiddenJobsCount(allJobs.length - filtered.length);
       setTotalPages(data.totalPages || 1);
       setPage(p);
     } catch (e: any) {
@@ -53,9 +61,26 @@ export default function CandidateDetail({ candidate }: Props) {
     } finally {
       setLoadingJobs(false);
     }
-  }, [candidate.technology, dateFrom, authHeaders]);
+  }, [candidate.technology, dateFrom, authHeaders, analysedJobIds]);
 
-  useEffect(() => { fetchJobs(1); }, [candidate.id]);
+  // On candidate change: load already-analysed IDs first, then fetch filtered jobs
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      let analysedIds = new Set<string>();
+      try {
+        const res = await fetch(`/api/applications?candidate_id=${candidate.id}`, { headers: authHeaders() });
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data)) {
+          analysedIds = new Set(data.map((a: any) => a.job_id));
+          setAnalysedJobIds(analysedIds);
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) fetchJobs(1, analysedIds);
+    };
+    init();
+    return () => { cancelled = true; };
+  }, [candidate.id]);
 
   const handleAnalyse = async () => {
     if (jobs.length === 0) return;
@@ -63,7 +88,7 @@ export default function CandidateDetail({ candidate }: Props) {
     setError('');
     setSavedCount(null);
     try {
-      // Step 1: Get AI scores
+      // Step 1: get AI scores
       const res = await fetch('/api/ai/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -80,7 +105,7 @@ export default function CandidateDetail({ candidate }: Props) {
       setResults(sorted);
       setFilterApplied('all');
 
-      // Step 2: Auto-save all results to DB with relevant/irrelevant status
+      // Step 2: save ALL metrics to DB
       const saveRes = await fetch('/api/applications/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -89,13 +114,29 @@ export default function CandidateDetail({ candidate }: Props) {
           results: sorted.map(r => ({
             job_id: r.job.id,
             status: r.suitable ? 'relevant' : 'irrelevant',
-            score: r.overallScore
+            score: r.overallScore,
+            skill_match_score: r.skillMatchScore,
+            experience_score: r.experienceScore,
+            location_score: r.locationScore,
+            reasons: r.reasons,
+            job_title: r.job.title,
+            job_company: r.job.company,
+            job_location: r.job.location || r.job.country || '',
+            job_url: r.job.url || ''
           }))
         })
       });
+
       if (saveRes.ok) {
         const saved = await saveRes.json();
         setSavedCount(saved.saved);
+
+        // Mark these jobs as analysed so they don't appear again for this candidate
+        setAnalysedJobIds(prev => {
+          const next = new Set(prev);
+          sorted.forEach(r => next.add(r.job.id));
+          return next;
+        });
       }
     } catch (e: any) {
       setError('AI analysis failed: ' + e.message);
@@ -111,6 +152,7 @@ export default function CandidateDetail({ candidate }: Props) {
     setError('');
     setPage(1);
     setTotalPages(1);
+    setHiddenJobsCount(0);
     setUploadedSource(true);
   };
 
@@ -181,9 +223,15 @@ export default function CandidateDetail({ candidate }: Props) {
           {analysing ? 'Analysing...' : 'AI Analyse'}
         </button>
 
+        {/* Status indicators */}
         {uploadedSource && !results && (
           <span className="text-xs text-green-600 font-medium italic">
             {jobs.length} jobs loaded from file
+          </span>
+        )}
+        {hiddenJobsCount > 0 && !results && (
+          <span className="text-xs text-green-400 italic">
+            {hiddenJobsCount} already reviewed (hidden)
           </span>
         )}
         {results && (
@@ -193,7 +241,7 @@ export default function CandidateDetail({ candidate }: Props) {
         )}
         {savedCount !== null && (
           <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-            <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved to database
+            <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved
           </span>
         )}
       </div>
