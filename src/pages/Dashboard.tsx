@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { useNavigate } from 'react-router';
-import { LogOut, X, Upload, Users, FolderOpen } from 'lucide-react';
+import { LogOut, X, Upload, Users, FolderOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import CandidateList from '@/src/components/CandidateList';
 import CandidateDetail from '@/src/components/CandidateDetail';
 import ApplicationsView from '@/src/components/ApplicationsView';
@@ -192,6 +192,7 @@ export default function Dashboard() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState<View>('candidates');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -275,8 +276,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {view === 'candidates' && (
+      <div className="flex-1 flex overflow-hidden relative">
+        {view === 'candidates' && sidebarOpen && (
           <CandidateList
             candidates={candidates}
             selectedId={selectedId}
@@ -284,6 +285,19 @@ export default function Dashboard() {
             onAdd={() => setShowAdd(true)}
             loading={loading}
           />
+        )}
+
+        {/* Sidebar toggle button — only visible on candidates view */}
+        {view === 'candidates' && (
+          <button
+            onClick={() => setSidebarOpen(o => !o)}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            className={`absolute top-4 z-30 w-7 h-7 bg-white border border-green-300 rounded-r flex items-center justify-center shadow-sm hover:bg-green-50 text-green-700 transition-all ${
+              sidebarOpen ? 'left-72' : 'left-0'
+            }`}
+          >
+            {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </button>
         )}
 
         <main key={view === 'applications' ? 'apps' : (selected?.id || 'empty')} className="flex-1 flex flex-col overflow-hidden">

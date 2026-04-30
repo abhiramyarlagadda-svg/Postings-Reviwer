@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Zap, FileText, X, ExternalLink, FileSpreadsheet, CheckCircle } from 'lucide-react';
+import { Calendar, Zap, FileText, X, ExternalLink, FileSpreadsheet, CheckCircle, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { calculateScores, sortResults, type Candidate, type Job, type JobResult } from '@/src/lib/aiEngine';
 import JobTable from './JobTable';
@@ -150,15 +150,17 @@ export default function CandidateDetail({ candidate }: Props) {
         })
       });
 
-      if (saveRes.ok) {
-        const saved = await saveRes.json();
-        setSavedCount(saved.saved);
-        setAnalysedJobIds(prev => {
-          const next = new Set(prev);
-          sorted.forEach(r => next.add(r.job.id));
-          return next;
-        });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) {
+        throw new Error(`Save to DB failed: ${saveData.error || 'unknown error'}. Make sure the applications table has all required columns.`);
       }
+
+      setSavedCount(saveData.saved);
+      setAnalysedJobIds(prev => {
+        const next = new Set(prev);
+        sorted.forEach(r => next.add(r.job.id));
+        return next;
+      });
     } catch (e: any) {
       setError('AI analysis failed: ' + e.message);
     } finally {
@@ -292,8 +294,8 @@ export default function CandidateDetail({ candidate }: Props) {
             </span>
           )}
           {savedCount !== null && (
-            <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-              <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved
+            <span className="flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 border border-green-300 px-2.5 py-1 rounded animate-pulse">
+              <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved to Applications
             </span>
           )}
         </div>
@@ -315,6 +317,36 @@ export default function CandidateDetail({ candidate }: Props) {
         filterApplied={filterApplied}
         onFilterChange={setFilterApplied}
       />
+
+      {/* AI Analysis Loading Overlay */}
+      {analysing && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-2xl border-2 border-green-300 p-8 max-w-md w-full mx-4">
+            <div className="flex flex-col items-center gap-5">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+                  <Sparkles className="w-10 h-10 text-green-700 animate-pulse" />
+                </div>
+                <Loader2 className="absolute inset-0 w-20 h-20 text-green-700 animate-spin" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-bold text-green-900 uppercase tracking-wide">AI Analysing</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  Matching <span className="font-bold">{jobs.length}</span> jobs against {candidate.name}'s profile...
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+                <p className="text-[10px] text-green-500 mt-3 uppercase tracking-widest">
+                  Saving results to applications...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUploadJobs && (
         <UploadJobsModal
