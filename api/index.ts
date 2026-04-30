@@ -220,8 +220,11 @@ app.get('/api/jobs', authenticate, async (req: any, res) => {
 
 app.get('/api/applications', authenticate, async (req: any, res) => {
   const { candidate_id } = req.query;
-  let query = getDb().from('applications').select('*');
-  if (candidate_id) query = query.eq('candidate_id', candidate_id);
+  let query = getDb()
+    .from('applications')
+    .select('*, candidates(name, technology, country, experience_years)')
+    .eq('user_id', req.user.id);
+  if (candidate_id) query = query.eq('candidate_id', String(candidate_id));
 
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });

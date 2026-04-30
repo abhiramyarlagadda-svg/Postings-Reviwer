@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { useNavigate } from 'react-router';
-import { LogOut, X, Upload } from 'lucide-react';
+import { LogOut, X, Upload, Users, FolderOpen } from 'lucide-react';
 import CandidateList from '@/src/components/CandidateList';
 import CandidateDetail from '@/src/components/CandidateDetail';
+import ApplicationsView from '@/src/components/ApplicationsView';
 import type { Candidate } from '@/src/lib/aiEngine';
+
+type View = 'candidates' | 'applications';
 
 const TECHNOLOGIES = [
   'React', 'Vue', 'Angular', 'Node.js', 'Python', 'Java', 'Go',
@@ -188,6 +191,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
 export default function Dashboard() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const [view, setView] = useState<View>('candidates');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,12 +220,32 @@ export default function Dashboard() {
   return (
     <div className="h-screen bg-green-50 flex flex-col overflow-hidden">
       <header className="h-14 bg-green-700 text-white flex items-center justify-between px-6 shrink-0 shadow z-20">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-white rounded flex items-center justify-center">
-            <div className="w-3.5 h-3.5 bg-green-700" />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-white rounded flex items-center justify-center">
+              <div className="w-3.5 h-3.5 bg-green-700" />
+            </div>
+            <span className="text-sm font-bold tracking-tight">POSTINGS REVIEWER</span>
           </div>
-          <span className="text-sm font-bold tracking-tight">POSTINGS REVIEWER</span>
-          <span className="text-[10px] font-light opacity-60 tracking-widest hidden sm:block">| AI ENGINE</span>
+          {/* Nav tabs */}
+          <div className="flex items-center gap-1 bg-green-800 rounded p-0.5">
+            <button
+              onClick={() => setView('candidates')}
+              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded transition-colors ${
+                view === 'candidates' ? 'bg-white text-green-800' : 'text-green-200 hover:text-white'
+              }`}
+            >
+              <Users className="w-3 h-3" /> Candidates
+            </button>
+            <button
+              onClick={() => setView('applications')}
+              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded transition-colors ${
+                view === 'applications' ? 'bg-white text-green-800' : 'text-green-200 hover:text-white'
+              }`}
+            >
+              <FolderOpen className="w-3 h-3" /> Applications
+            </button>
+          </div>
         </div>
 
         <div className="relative">
@@ -252,16 +276,20 @@ export default function Dashboard() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <CandidateList
-          candidates={candidates}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onAdd={() => setShowAdd(true)}
-          loading={loading}
-        />
+        {view === 'candidates' && (
+          <CandidateList
+            candidates={candidates}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onAdd={() => setShowAdd(true)}
+            loading={loading}
+          />
+        )}
 
-        <main key={selected?.id || 'empty'} className="flex-1 flex flex-col overflow-hidden">
-          {selected ? (
+        <main key={view === 'applications' ? 'apps' : (selected?.id || 'empty')} className="flex-1 flex flex-col overflow-hidden">
+          {view === 'applications' ? (
+            <ApplicationsView />
+          ) : selected ? (
             <CandidateDetail candidate={selected} />
           ) : (
             <div className="flex-1 flex items-center justify-center text-green-400 text-xs uppercase tracking-widest font-bold">
