@@ -231,6 +231,30 @@ app.get('/api/applications', authenticate, async (req: any, res) => {
   res.json(data || []);
 });
 
+app.delete('/api/applications/:id', authenticate, async (req: any, res) => {
+  const { error } = await getDb()
+    .from('applications')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ deleted: 1 });
+});
+
+app.post('/api/applications/bulk-delete', authenticate, async (req: any, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  const { error } = await getDb()
+    .from('applications')
+    .delete()
+    .in('id', ids)
+    .eq('user_id', req.user.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ deleted: ids.length });
+});
+
 app.post('/api/applications/analyse', authenticate, async (req: any, res) => {
   try {
     const { candidate_id, results } = req.body;

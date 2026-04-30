@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Eye } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Eye, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 
 interface Application {
@@ -57,12 +57,17 @@ export default function ApplicationsView() {
   const [candidateFilter, setCandidateFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const fetchApps = useCallback(async () => {
     setLoading(true);
     setError('');
     setReviewedIds(new Set());
     setExpanded(new Set());
+    setConfirmingDelete(null);
     try {
       const res = await fetch('/api/applications', {
         headers: { Authorization: `Bearer ${token}` }
@@ -92,6 +97,64 @@ export default function ApplicationsView() {
       }
       return next;
     });
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const deleteOne = async (id: string) => {
+    setConfirmingDelete(null);
+    setDeletingIds(prev => { const n = new Set(prev); n.add(id); return n; });
+
+    try {
+      const res = await fetch(`/api/applications/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+      // Brief delay so the fade-out plays
+      setTimeout(() => {
+        setApps(prev => prev.filter(a => a.id !== id));
+        setReviewedIds(r => { const n = new Set(r); n.delete(id); return n; });
+        setExpanded(e => { const n = new Set(e); n.delete(id); return n; });
+        setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+        showToast('Application deleted');
+      }, 280);
+    } catch (e: any) {
+      setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      setError(e.message || 'Delete failed');
+    }
+  };
+
+  const deleteReviewed = async () => {
+    const ids = Array.from(reviewedIds);
+    if (ids.length === 0) return;
+    setBulkConfirm(false);
+    setDeletingIds(prev => { const n = new Set(prev); ids.forEach(id => n.add(id)); return n; });
+
+    try {
+      const res = await fetch('/api/applications/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Bulk delete failed');
+
+      setTimeout(() => {
+        setApps(prev => prev.filter(a => !reviewedIds.has(a.id)));
+        setReviewedIds(new Set());
+        setDeletingIds(new Set());
+        showToast(`${ids.length} reviewed application${ids.length > 1 ? 's' : ''} deleted`);
+      }, 320);
+    } catch (e: any) {
+      setDeletingIds(new Set());
+      setError(e.message || 'Bulk delete failed');
+    }
   };
 
   // Unique candidate names for dropdown
@@ -205,11 +268,39 @@ export default function ApplicationsView() {
               <span className="text-[10px] text-green-500">
                 Click <span className="font-bold text-red-500">Not Suitable</span> to expand red flags &amp; mark as reviewed
               </span>
-              <span className={`text-[10px] font-bold tabular-nums ${
-                allReviewed ? 'text-green-600' : 'text-amber-600'
-              }`}>
-                {reviewedCount} / {irrelevantCount} reviewed
-              </span>
+              <div className="flex items-center gap-2.5">
+                <span className={`text-[10px] font-bold tabular-nums ${
+                  allReviewed ? 'text-green-600' : 'text-amber-600'
+                }`}>
+                  {reviewedCount} / {irrelevantCount} reviewed
+                </span>
+                {reviewedCount > 0 && !bulkConfirm && (
+                  <button
+                    onClick={() => setBulkConfirm(true)}
+                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete reviewed ({reviewedCount})
+                  </button>
+                )}
+                {bulkConfirm && (
+                  <div className="flex items-center gap-1.5 bg-red-50 border border-red-300 rounded px-2 py-1 animate-[shimmer_0.3s_ease-out]">
+                    <AlertTriangle className="w-3 h-3 text-red-600" />
+                    <span className="text-[10px] font-bold text-red-700">Delete {reviewedCount} forever?</span>
+                    <button
+                      onClick={deleteReviewed}
+                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-600 text-white hover:bg-red-700"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setBulkConfirm(false)}
+                      className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-red-700 hover:bg-red-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -286,12 +377,15 @@ export default function ApplicationsView() {
                 <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Status</th>
                 <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Analysed</th>
                 <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs">Link</th>
+                <th className="px-4 py-3 font-bold text-green-800 uppercase tracking-wider text-xs w-12"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-green-50">
               {filtered.map(app => {
                 const isExpanded = expanded.has(app.id);
                 const isReviewed = reviewedIds.has(app.id);
+                const isDeleting = deletingIds.has(app.id);
+                const isConfirming = confirmingDelete === app.id;
                 const reasons = Array.isArray(app.reasons) ? app.reasons : [];
                 const hasReasons = reasons.length > 0;
                 const isIrrelevant = app.status === 'irrelevant';
@@ -300,10 +394,14 @@ export default function ApplicationsView() {
 
                 return (
                   <React.Fragment key={app.id}>
-                    <tr className={`transition-colors ${
-                      isReviewed && isIrrelevant
-                        ? 'bg-green-50/30 opacity-75 hover:opacity-100 hover:bg-green-50/60'
-                        : 'hover:bg-green-50/40'
+                    <tr className={`transition-all duration-300 ${
+                      isDeleting
+                        ? 'opacity-0 -translate-x-4 bg-red-50'
+                        : isConfirming
+                          ? 'bg-red-50/60'
+                          : isReviewed && isIrrelevant
+                            ? 'bg-green-50/30 opacity-75 hover:opacity-100 hover:bg-green-50/60'
+                            : 'hover:bg-green-50/40'
                     }`}>
                       <td className="px-4 py-3">
                         <div className="text-sm font-semibold text-green-900">{candidateName}</div>
@@ -373,10 +471,39 @@ export default function ApplicationsView() {
                           <span className="text-xs text-green-300">No link</span>
                         )}
                       </td>
+                      <td className="px-2 py-3">
+                        {isConfirming ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => deleteOne(app.id)}
+                              title="Confirm delete"
+                              className="p-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDelete(null)}
+                              title="Cancel"
+                              className="p-1.5 rounded bg-white text-green-700 border border-green-200 hover:bg-green-50 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingDelete(app.id)}
+                            title="Delete application"
+                            disabled={isDeleting}
+                            className="p-1.5 rounded text-green-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-30"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
-                    {isExpanded && hasReasons && (
+                    {isExpanded && hasReasons && !isDeleting && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-3 bg-red-50/40 border-t border-red-100">
+                        <td colSpan={9} className="px-4 py-3 bg-red-50/40 border-t border-red-100">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-red-500 mb-1.5">Red Flags</p>
                           <ul className="text-xs text-red-700 space-y-1">
                             {reasons.map((r, i) => (
@@ -393,6 +520,14 @@ export default function ApplicationsView() {
           </table>
         )}
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg border border-green-800 animate-[shimmer_0.4s_ease-out]">
+          <CheckCircle2 className="w-4 h-4" />
+          <span className="text-sm font-bold">{toast}</span>
+        </div>
+      )}
     </div>
   );
 }
