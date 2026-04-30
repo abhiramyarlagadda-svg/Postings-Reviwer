@@ -9,10 +9,16 @@ interface Props {
   candidate: Candidate;
 }
 
+const toDateStr = (d: Date) => d.toISOString().split('T')[0];
+
+type QuickFilter = 'today' | 'yesterday' | 'week' | 'all' | null;
+
 export default function CandidateDetail({ candidate }: Props) {
   const { token } = useAuth();
   const [dateFrom, setDateFrom] = useState('');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [totalJobs, setTotalJobs] = useState(0);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -31,16 +37,16 @@ export default function CandidateDetail({ candidate }: Props) {
   useEffect(() => { tokenRef.current = token; }, [token]);
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
 
-  // Fetch jobs, filtering out already-analysed ones for this candidate
-  const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>) => {
+  const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>, dateOverride?: string) => {
     setLoadingJobs(true);
     setResults(null);
     setSavedCount(null);
     setError('');
     setUploadedSource(false);
     try {
+      const effectiveDate = dateOverride !== undefined ? dateOverride : dateFrom;
       const params = new URLSearchParams({ page: String(p), limit: '20' });
-      if (dateFrom) params.set('date_from', dateFrom);
+      if (effectiveDate) params.set('date_from', effectiveDate);
       if (candidate.technology) params.set('technology', candidate.technology);
 
       const res = await fetch(`/api/jobs?${params}`, { headers: authHeaders() });
@@ -54,10 +60,12 @@ export default function CandidateDetail({ candidate }: Props) {
       setJobs(filtered);
       setHiddenJobsCount(allJobs.length - filtered.length);
       setTotalPages(data.totalPages || 1);
+      setTotalJobs(data.total || 0);
       setPage(p);
     } catch (e: any) {
       setError(e.message);
       setJobs([]);
+      setTotalJobs(0);
     } finally {
       setLoadingJobs(false);
     }
@@ -76,11 +84,28 @@ export default function CandidateDetail({ candidate }: Props) {
           setAnalysedJobIds(analysedIds);
         }
       } catch { /* ignore */ }
-      if (!cancelled) fetchJobs(1, analysedIds);
+      if (!cancelled) fetchJobs(1, analysedIds, '');
     };
     init();
     return () => { cancelled = true; };
   }, [candidate.id]);
+
+  const handleQuickFilter = (preset: 'today' | 'yesterday' | 'week' | 'all') => {
+    const now = new Date();
+    let date = '';
+    if (preset === 'today') date = toDateStr(now);
+    else if (preset === 'yesterday') { const y = new Date(now); y.setDate(now.getDate() - 1); date = toDateStr(y); }
+    else if (preset === 'week') { const w = new Date(now); w.setDate(now.getDate() - 6); date = toDateStr(w); }
+    setQuickFilter(preset);
+    setDateFrom(date);
+    fetchJobs(1, analysedJobIds, date);
+  };
+
+  const handleDateChange = (val: string) => {
+    setDateFrom(val);
+    setQuickFilter(null);
+    fetchJobs(1, analysedJobIds, val);
+  };
 
   const handleAnalyse = async () => {
     if (jobs.length === 0) return;
@@ -88,7 +113,6 @@ export default function CandidateDetail({ candidate }: Props) {
     setError('');
     setSavedCount(null);
     try {
-      // Step 1: get AI scores
       const res = await fetch('/api/ai/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -105,7 +129,6 @@ export default function CandidateDetail({ candidate }: Props) {
       setResults(sorted);
       setFilterApplied('all');
 
-      // Step 2: save ALL metrics to DB
       const saveRes = await fetch('/api/applications/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -130,8 +153,6 @@ export default function CandidateDetail({ candidate }: Props) {
       if (saveRes.ok) {
         const saved = await saveRes.json();
         setSavedCount(saved.saved);
-
-        // Mark these jobs as analysed so they don't appear again for this candidate
         setAnalysedJobIds(prev => {
           const next = new Set(prev);
           sorted.forEach(r => next.add(r.job.id));
@@ -152,6 +173,7 @@ export default function CandidateDetail({ candidate }: Props) {
     setError('');
     setPage(1);
     setTotalPages(1);
+    setTotalJobs(uploaded.length);
     setHiddenJobsCount(0);
     setUploadedSource(true);
   };
@@ -160,6 +182,13 @@ export default function CandidateDetail({ candidate }: Props) {
     if (url.toLowerCase().includes('.pdf') || url.includes('application/pdf')) return url;
     return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
   };
+
+  const quickBtns: { label: string; value: 'today' | 'yesterday' | 'week' | 'all' }[] = [
+    { label: 'Today', value: 'today' },
+    { label: 'Yesterday', value: 'yesterday' },
+    { label: 'Last 7 Days', value: 'week' },
+    { label: 'All Time', value: 'all' },
+  ];
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-5 gap-4">
@@ -189,61 +218,85 @@ export default function CandidateDetail({ candidate }: Props) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-white border border-green-200 rounded px-3 py-2">
-          <Calendar className="w-3.5 h-3.5 text-green-700" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="text-xs text-green-800 outline-none bg-transparent w-36"
-          />
+      <div className="flex flex-col gap-2">
+        {/* Row 1: filters + actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Quick date presets */}
+          {quickBtns.map(btn => (
+            <button
+              key={btn.value}
+              onClick={() => handleQuickFilter(btn.value)}
+              className={`text-xs font-bold uppercase tracking-widest px-3 py-2 rounded border transition-colors ${
+                quickFilter === btn.value
+                  ? 'bg-green-700 text-white border-green-700'
+                  : 'border-green-300 text-green-700 bg-white hover:bg-green-50'
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
+
+          {/* Manual date picker */}
+          <div className="flex items-center gap-2 bg-white border border-green-200 rounded px-3 py-2">
+            <Calendar className="w-3.5 h-3.5 text-green-700 shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => handleDateChange(e.target.value)}
+              className="text-xs text-green-800 outline-none bg-transparent w-36"
+            />
+          </div>
+
+          <div className="flex-1" />
+
+          <button
+            onClick={() => setShowUploadJobs(true)}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded border border-green-300 text-green-700 bg-white hover:bg-green-50"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Upload Jobs
+          </button>
+
+          <button
+            onClick={handleAnalyse}
+            disabled={analysing || jobs.length === 0}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            {analysing ? 'Analysing...' : 'AI Analyse'}
+          </button>
         </div>
 
-        <button
-          onClick={() => fetchJobs(1)}
-          className="text-xs font-bold uppercase tracking-widest px-3 py-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
-        >
-          Apply Filter
-        </button>
-
-        <button
-          onClick={() => setShowUploadJobs(true)}
-          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded border border-green-300 text-green-700 hover:bg-green-50"
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5" /> Upload Jobs
-        </button>
-
-        <button
-          onClick={handleAnalyse}
-          disabled={analysing || jobs.length === 0}
-          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Zap className="w-3.5 h-3.5" />
-          {analysing ? 'Analysing...' : 'AI Analyse'}
-        </button>
-
-        {/* Status indicators */}
-        {uploadedSource && !results && (
-          <span className="text-xs text-green-600 font-medium italic">
-            {jobs.length} jobs loaded from file
-          </span>
-        )}
-        {hiddenJobsCount > 0 && !results && (
-          <span className="text-xs text-green-400 italic">
-            {hiddenJobsCount} already reviewed (hidden)
-          </span>
-        )}
-        {results && (
-          <span className="text-xs text-green-700 uppercase tracking-widest font-bold">
-            {results.filter(r => r.suitable).length} relevant / {results.length} total
-          </span>
-        )}
-        {savedCount !== null && (
-          <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-            <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved
-          </span>
-        )}
+        {/* Row 2: status info */}
+        <div className="flex items-center gap-4 flex-wrap min-h-[20px]">
+          {!results && !loadingJobs && !uploadedSource && totalJobs > 0 && (
+            <span className="text-xs text-green-700 font-semibold">
+              {totalJobs.toLocaleString()} jobs found
+              {hiddenJobsCount > 0 && (
+                <span className="text-green-400 font-normal ml-1">
+                  ({hiddenJobsCount} already reviewed hidden)
+                </span>
+              )}
+            </span>
+          )}
+          {uploadedSource && !results && (
+            <span className="text-xs text-green-600 font-medium italic">
+              {jobs.length} jobs loaded from file
+            </span>
+          )}
+          {loadingJobs && (
+            <span className="text-xs text-green-400 italic">Loading...</span>
+          )}
+          {results && (
+            <span className="text-xs text-green-700 uppercase tracking-widest font-bold">
+              {results.filter(r => r.suitable).length} relevant / {results.length} total
+            </span>
+          )}
+          {savedCount !== null && (
+            <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+              <CheckCircle className="w-3.5 h-3.5" /> {savedCount} results saved
+            </span>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -263,7 +316,6 @@ export default function CandidateDetail({ candidate }: Props) {
         onFilterChange={setFilterApplied}
       />
 
-      {/* Upload Jobs Modal */}
       {showUploadJobs && (
         <UploadJobsModal
           onClose={() => setShowUploadJobs(false)}
@@ -271,7 +323,6 @@ export default function CandidateDetail({ candidate }: Props) {
         />
       )}
 
-      {/* Resume Preview Modal */}
       {resumePreviewUrl && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg border border-green-200 w-full max-w-4xl h-[88vh] flex flex-col shadow-2xl">
