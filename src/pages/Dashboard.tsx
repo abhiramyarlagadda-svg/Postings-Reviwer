@@ -310,14 +310,22 @@ export default function Dashboard() {
           </button>
         )}
 
-        <main key={view === 'applications' ? 'apps' : (selected?.id || 'empty')} className="flex-1 flex flex-col overflow-hidden">
-          {view === 'applications' ? (
-            <ApplicationsView />
-          ) : selected ? (
-            <CandidateDetail candidate={selected} />
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-green-400 text-xs uppercase tracking-widest font-bold">
-              {loading ? 'Loading...' : 'Select a candidate from the left to begin'}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Candidates view stays mounted to preserve AI analysis results when switching tabs */}
+          <div className={`flex-1 flex flex-col overflow-hidden ${view === 'candidates' ? '' : 'hidden'}`}>
+            {selected ? (
+              <CandidateDetail key={selected.id} candidate={selected} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-green-400 text-xs uppercase tracking-widest font-bold">
+                {loading ? 'Loading...' : 'Select a candidate from the left to begin'}
+              </div>
+            )}
+          </div>
+
+          {/* Applications view remounts each visit so it always shows fresh DB state */}
+          {view === 'applications' && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ApplicationsView />
             </div>
           )}
         </main>
