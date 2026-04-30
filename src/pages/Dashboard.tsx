@@ -193,6 +193,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [view, setView] = useState<View>('candidates');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [appsRevision, setAppsRevision] = useState(0);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -314,7 +315,7 @@ export default function Dashboard() {
           {/* Candidates view stays mounted to preserve AI analysis results when switching tabs */}
           <div className={`flex-1 flex flex-col overflow-hidden ${view === 'candidates' ? '' : 'hidden'}`}>
             {selected ? (
-              <CandidateDetail key={selected.id} candidate={selected} />
+              <CandidateDetail key={selected.id} candidate={selected} appsRevision={appsRevision} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-green-400 text-xs uppercase tracking-widest font-bold">
                 {loading ? 'Loading...' : 'Select a candidate from the left to begin'}
@@ -325,7 +326,7 @@ export default function Dashboard() {
           {/* Applications view remounts each visit so it always shows fresh DB state */}
           {view === 'applications' && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <ApplicationsView />
+              <ApplicationsView onDeleted={() => setAppsRevision(r => r + 1)} />
             </div>
           )}
         </main>

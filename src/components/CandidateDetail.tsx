@@ -7,13 +7,14 @@ import UploadJobsModal from './UploadJobsModal';
 
 interface Props {
   candidate: Candidate;
+  appsRevision?: number;
 }
 
 const toDateStr = (d: Date) => d.toISOString().split('T')[0];
 
 type QuickFilter = 'today' | 'yesterday' | 'week' | 'all' | null;
 
-export default function CandidateDetail({ candidate }: Props) {
+export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const { token } = useAuth();
   const [dateFrom, setDateFrom] = useState('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
@@ -88,7 +89,7 @@ export default function CandidateDetail({ candidate }: Props) {
     };
     init();
     return () => { cancelled = true; };
-  }, [candidate.id]);
+  }, [candidate.id, appsRevision]);
 
   const handleQuickFilter = (preset: 'today' | 'yesterday' | 'week' | 'all') => {
     const now = new Date();

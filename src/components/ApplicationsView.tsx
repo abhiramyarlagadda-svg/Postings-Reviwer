@@ -47,7 +47,7 @@ function AnimatedNumber({ value, className }: { value: number; className?: strin
   return <span className={className}>{display}</span>;
 }
 
-export default function ApplicationsView() {
+export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void }) {
   const { token } = useAuth();
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +123,7 @@ export default function ApplicationsView() {
         setExpanded(e => { const n = new Set(e); n.delete(id); return n; });
         setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
         showToast('Application deleted');
+        onDeleted?.();
       }, 280);
     } catch (e: any) {
       setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
@@ -150,6 +151,7 @@ export default function ApplicationsView() {
         setReviewedIds(new Set());
         setDeletingIds(new Set());
         showToast(`${ids.length} reviewed application${ids.length > 1 ? 's' : ''} deleted`);
+        onDeleted?.();
       }, 320);
     } catch (e: any) {
       setDeletingIds(new Set());
