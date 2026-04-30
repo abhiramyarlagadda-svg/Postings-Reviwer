@@ -94,7 +94,12 @@ export default function JobTable({
                       </td>
                       <td className="px-4 py-3 text-green-700 font-medium text-sm">{j.company}</td>
                       <td className="px-4 py-3 text-green-600 text-sm">
-                        {j.is_remote ? 'Remote' : (j.location || j.country || '—')}
+                        {j.is_remote ? 'Remote' : (() => {
+                          const city = j.location ? j.location.split(',')[0].trim() : '';
+                          const country = j.country || '';
+                          if (city && country) return `${city}, ${country}`;
+                          return city || country || '—';
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-green-500 text-xs">
                         {j.posted_at ? new Date(j.posted_at).toLocaleDateString() : '—'}
