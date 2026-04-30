@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Eye } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 
 interface Application {
@@ -27,6 +27,26 @@ interface Application {
 
 type StatusFilter = 'all' | 'relevant' | 'irrelevant';
 
+function AnimatedNumber({ value, className }: { value: number; className?: string }) {
+  const [display, setDisplay] = useState(value);
+
+  useEffect(() => {
+    if (display === value) return;
+    const delay = Math.abs(value - display) > 5 ? 18 : 45;
+    const timer = setTimeout(() => {
+      setDisplay(prev => prev + (value > prev ? 1 : -1));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [display, value]);
+
+  // Reset immediately when value jumps up significantly (fresh data load)
+  useEffect(() => {
+    if (value - display > 20) setDisplay(0);
+  }, [value]);
+
+  return <span className={className}>{display}</span>;
+}
+
 export default function ApplicationsView() {
   const { token } = useAuth();
   const [apps, setApps] = useState<Application[]>([]);
@@ -36,10 +56,13 @@ export default function ApplicationsView() {
   const [search, setSearch] = useState('');
   const [candidateFilter, setCandidateFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
 
   const fetchApps = useCallback(async () => {
     setLoading(true);
     setError('');
+    setReviewedIds(new Set());
+    setExpanded(new Set());
     try {
       const res = await fetch('/api/applications', {
         headers: { Authorization: `Bearer ${token}` }
@@ -56,10 +79,17 @@ export default function ApplicationsView() {
 
   useEffect(() => { fetchApps(); }, [fetchApps]);
 
-  const toggle = (id: string) => {
+  const toggle = (id: string, isIrrelevant?: boolean) => {
     setExpanded(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        if (isIrrelevant) {
+          setReviewedIds(r => { const nr = new Set(r); nr.add(id); return nr; });
+        }
+      }
       return next;
     });
   };
@@ -85,12 +115,16 @@ export default function ApplicationsView() {
 
   const relevantCount = apps.filter(a => a.status === 'relevant').length;
   const irrelevantCount = apps.filter(a => a.status === 'irrelevant').length;
+  const reviewedCount = reviewedIds.size;
+  const remainingCount = Math.max(0, irrelevantCount - reviewedCount);
+  const progressPercent = irrelevantCount > 0 ? (reviewedCount / irrelevantCount) * 100 : 0;
+  const allReviewed = irrelevantCount > 0 && remainingCount === 0;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-5 gap-4">
       {/* Header */}
       <div className="bg-white rounded border border-green-100 p-5 shadow-sm">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div>
             <h2 className="text-2xl font-bold text-green-900">Applications</h2>
             <p className="text-xs text-green-500 mt-1">All AI-analysed jobs saved across candidates</p>
@@ -116,11 +150,73 @@ export default function ApplicationsView() {
             </button>
           </div>
         </div>
+
+        {/* Review progress tracker — only shown when there are not-suitable items */}
+        {!loading && irrelevantCount > 0 && (
+          <div className={`rounded-lg border px-4 py-3 transition-all duration-500 ${
+            allReviewed
+              ? 'bg-green-50 border-green-300'
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {allReviewed ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Eye className="w-4 h-4 text-amber-600" />
+                )}
+                <span className={`text-xs font-bold uppercase tracking-widest ${
+                  allReviewed ? 'text-green-700' : 'text-amber-700'
+                }`}>
+                  {allReviewed ? 'All Not Suitable Items Reviewed' : 'Review Progress'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {allReviewed ? (
+                  <span className="text-xs font-bold text-green-600 bg-green-100 px-2.5 py-1 rounded-full border border-green-300">
+                    {irrelevantCount} / {irrelevantCount} reviewed
+                  </span>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <AnimatedNumber
+                      value={remainingCount}
+                      className="text-2xl font-black text-amber-700 tabular-nums leading-none"
+                    />
+                    <span className="text-xs font-bold text-amber-600">remaining to review</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-2 bg-white rounded-full border border-green-100 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ease-out ${
+                  allReviewed
+                    ? 'bg-green-500'
+                    : 'bg-gradient-to-r from-amber-400 to-green-500'
+                }`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[10px] text-green-500">
+                Click <span className="font-bold text-red-500">Not Suitable</span> to expand red flags &amp; mark as reviewed
+              </span>
+              <span className={`text-[10px] font-bold tabular-nums ${
+                allReviewed ? 'text-green-600' : 'text-amber-600'
+              }`}>
+                {reviewedCount} / {irrelevantCount} reviewed
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Status tabs */}
         {([['all', 'All'], ['relevant', 'Relevant'], ['irrelevant', 'Not Suitable']] as [StatusFilter, string][]).map(([val, label]) => (
           <button
             key={val}
@@ -135,7 +231,6 @@ export default function ApplicationsView() {
           </button>
         ))}
 
-        {/* Candidate filter */}
         <select
           value={candidateFilter}
           onChange={e => setCandidateFilter(e.target.value)}
@@ -147,7 +242,6 @@ export default function ApplicationsView() {
           ))}
         </select>
 
-        {/* Search */}
         <div className="flex items-center gap-2 bg-white border border-green-200 rounded px-3 py-2 flex-1 min-w-[200px]">
           <Search className="w-3.5 h-3.5 text-green-500 shrink-0" />
           <input
@@ -197,14 +291,20 @@ export default function ApplicationsView() {
             <tbody className="divide-y divide-green-50">
               {filtered.map(app => {
                 const isExpanded = expanded.has(app.id);
+                const isReviewed = reviewedIds.has(app.id);
                 const reasons = Array.isArray(app.reasons) ? app.reasons : [];
                 const hasReasons = reasons.length > 0;
+                const isIrrelevant = app.status === 'irrelevant';
                 const candidateName = app.candidates?.name || 'Unknown';
                 const candidateTech = app.candidates?.technology || '';
 
                 return (
                   <React.Fragment key={app.id}>
-                    <tr className="hover:bg-green-50/40">
+                    <tr className={`transition-colors ${
+                      isReviewed && isIrrelevant
+                        ? 'bg-green-50/30 opacity-75 hover:opacity-100 hover:bg-green-50/60'
+                        : 'hover:bg-green-50/40'
+                    }`}>
                       <td className="px-4 py-3">
                         <div className="text-sm font-semibold text-green-900">{candidateName}</div>
                         {candidateTech && (
@@ -233,11 +333,26 @@ export default function ApplicationsView() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => hasReasons && toggle(app.id)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-red-50 text-red-600 border border-red-200 ${hasReasons ? 'hover:bg-red-100 cursor-pointer' : 'cursor-default'}`}
+                            onClick={() => hasReasons && toggle(app.id, true)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider border transition-all ${
+                              isReviewed
+                                ? 'bg-gray-50 text-gray-400 border-gray-200'
+                                : hasReasons
+                                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 cursor-pointer'
+                                  : 'bg-red-50 text-red-600 border-red-200 cursor-default'
+                            }`}
                           >
-                            Not Suitable
-                            {hasReasons && (isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                            {isReviewed ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-green-500" />
+                                <span>Reviewed</span>
+                              </>
+                            ) : (
+                              <>
+                                Not Suitable
+                                {hasReasons && (isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                              </>
+                            )}
                           </button>
                         )}
                       </td>
