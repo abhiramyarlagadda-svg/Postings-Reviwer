@@ -261,10 +261,28 @@ export default function CandidateDetail({ candidate }: Props) {
           <button
             onClick={handleAnalyse}
             disabled={analysing || jobs.length === 0}
-            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded bg-green-700 text-white hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`relative flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded text-white disabled:cursor-not-allowed overflow-hidden transition-all ${
+              analysing
+                ? 'bg-gradient-to-r from-green-700 via-green-500 to-green-700 bg-[length:200%_100%] animate-[shimmer_1.2s_linear_infinite] shadow-lg shadow-green-300 ring-2 ring-green-300'
+                : 'bg-green-700 hover:bg-green-800 disabled:opacity-50'
+            }`}
           >
-            <Zap className="w-3.5 h-3.5" />
-            {analysing ? 'Analysing...' : 'AI Analyse'}
+            {analysing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Analysing</span>
+                <span className="inline-flex">
+                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5" />
+                <span>AI Analyse</span>
+              </>
+            )}
           </button>
         </div>
 
