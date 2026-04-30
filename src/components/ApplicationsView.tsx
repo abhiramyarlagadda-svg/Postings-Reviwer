@@ -197,7 +197,8 @@ export default function ApplicationsView() {
             <tbody className="divide-y divide-green-50">
               {filtered.map(app => {
                 const isExpanded = expanded.has(app.id);
-                const hasReasons = Array.isArray(app.reasons) && app.reasons.length > 0;
+                const reasons = Array.isArray(app.reasons) ? app.reasons : [];
+                const hasReasons = reasons.length > 0;
                 const candidateName = app.candidates?.name || 'Unknown';
                 const candidateTech = app.candidates?.technology || '';
 
@@ -219,11 +220,11 @@ export default function ApplicationsView() {
                       <td className="px-4 py-3 text-sm text-green-600">{app.job_location || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="text-sm font-bold text-green-800">{app.score ?? '—'}%</div>
-                        {app.skill_match_score != null && (
-                          <div className="text-[10px] text-green-400">
-                            Skill {app.skill_match_score}% · Exp {app.experience_score}%
-                          </div>
-                        )}
+                        <div className="text-[10px] text-green-400 space-y-0.5 mt-0.5">
+                          {app.skill_match_score != null && <div>Skill {app.skill_match_score}%</div>}
+                          {app.experience_score != null && <div>Exp {app.experience_score}%</div>}
+                          {app.location_score != null && <div>Loc {app.location_score}%</div>}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {app.status === 'relevant' ? (
@@ -240,7 +241,7 @@ export default function ApplicationsView() {
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-green-400">
+                      <td className="px-4 py-3 text-xs text-green-400 whitespace-nowrap">
                         {app.created_at ? new Date(app.created_at).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-4 py-3">
@@ -263,7 +264,7 @@ export default function ApplicationsView() {
                         <td colSpan={8} className="px-4 py-3 bg-red-50/40 border-t border-red-100">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-red-500 mb-1.5">Red Flags</p>
                           <ul className="text-xs text-red-700 space-y-1">
-                            {app.reasons.map((r, i) => (
+                            {reasons.map((r, i) => (
                               <li key={i}>• {r}</li>
                             ))}
                           </ul>
