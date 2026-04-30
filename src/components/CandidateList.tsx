@@ -12,7 +12,7 @@ interface Props {
 
 export default function CandidateList({ candidates, selectedId, onSelect, onAdd, loading }: Props) {
   return (
-    <aside className="w-72 h-full bg-white border-r border-green-100 flex flex-col shrink-0">
+    <aside className="w-full h-full bg-white border-r border-green-100 flex flex-col">
       <div className="px-4 py-3 border-b border-green-100 flex items-center justify-between bg-green-50/50">
         <h2 className="text-xs font-bold uppercase tracking-widest text-green-800">Candidates</h2>
         <button

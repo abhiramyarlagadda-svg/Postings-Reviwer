@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/src/lib/AuthContext';
 import { useNavigate } from 'react-router';
-import { LogOut, X, Upload, Users, FolderOpen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LogOut, X, Upload, Users, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import CandidateList from '@/src/components/CandidateList';
 import CandidateDetail from '@/src/components/CandidateDetail';
 import ApplicationsView from '@/src/components/ApplicationsView';
@@ -277,26 +277,36 @@ export default function Dashboard() {
       </header>
 
       <div className="flex-1 flex overflow-hidden relative">
-        {view === 'candidates' && sidebarOpen && (
-          <CandidateList
-            candidates={candidates}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onAdd={() => setShowAdd(true)}
-            loading={loading}
-          />
+        {view === 'candidates' && (
+          <div
+            className={`shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
+              sidebarOpen ? 'w-72' : 'w-0'
+            }`}
+          >
+            <div className="w-72 h-full">
+              <CandidateList
+                candidates={candidates}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onAdd={() => setShowAdd(true)}
+                loading={loading}
+              />
+            </div>
+          </div>
         )}
 
-        {/* Sidebar toggle button — only visible on candidates view */}
+        {/* Floating tab-style toggle handle on the seam */}
         {view === 'candidates' && (
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            className={`absolute top-4 z-30 w-7 h-7 bg-white border border-green-300 rounded-r flex items-center justify-center shadow-sm hover:bg-green-50 text-green-700 transition-all ${
+            title={sidebarOpen ? 'Hide candidates' : 'Show candidates'}
+            className={`group absolute top-1/2 -translate-y-1/2 z-30 transition-[left] duration-300 ease-in-out ${
               sidebarOpen ? 'left-72' : 'left-0'
             }`}
           >
-            {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+            <span className="flex items-center justify-center w-5 h-16 bg-white border border-l-0 border-green-300 rounded-r-md shadow-md text-green-600 hover:w-6 hover:bg-green-700 hover:text-white hover:border-green-700 transition-all duration-200">
+              {sidebarOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </span>
           </button>
         )}
 
