@@ -302,20 +302,60 @@ app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
     const truncatedJobs = jobs.slice(0, 50);
     const jobList = truncatedJobs.map((j: any, i: number) => {
       const skills = Array.isArray(j.skills) ? j.skills.join(', ') : '';
-      return `${i}: "${j.title}" at ${j.company}. Skills: [${skills}]. Description: ${(j.description || '').substring(0, 300)}`;
-    }).join('\n');
+      const location = j.is_remote ? 'Remote' : `${j.location || ''} ${j.country || ''}`.trim();
+      return [
+        `--- JOB ${i} ---`,
+        `Title: ${j.title}`,
+        `Company: ${j.company}`,
+        `Location: ${location || 'Not specified'}`,
+        `Required Skills: ${skills || 'Not listed'}`,
+        `Description: ${(j.description || 'No description').substring(0, 600)}`,
+      ].join('\n');
+    }).join('\n\n');
 
-    const prompt = `You are a recruitment AI. Score how well a candidate's skills match each job.
+    const companies = (candidate.companies_worked || []).join(', ') || 'none';
 
-Candidate primary technology: ${candidate.technology}
-Candidate experience: ${candidate.experience_years} years
-Candidate companies worked at: ${(candidate.companies_worked || []).join(', ') || 'none'}
+    const prompt = `You are an expert technical recruiter. Carefully evaluate whether this candidate is a genuine match for each job listed.
 
-Jobs:
+=== CANDIDATE PROFILE ===
+Primary Technology / Domain: ${candidate.technology}
+Total Work Experience: ${candidate.experience_years} years
+Location / Country: ${candidate.country}
+Previous Employers: ${companies}
+
+=== JOBS TO EVALUATE ===
 ${jobList}
 
-For each job, return a skill match score from 0 to 100 based on technology/skills overlap.
-Return ONLY a JSON array in this exact format: [{"index": 0, "score": 85}, {"index": 1, "score": 40}, ...]`;
+=== YOUR TASK ===
+For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate honestly and return:
+
+- skillMatchScore (0–100): How well does the candidate's actual skillset align with what the job PRIMARILY requires?
+  • Base this on the job's core requirements, NOT incidental keyword overlap.
+  • Example: a Python/Data Science candidate is NOT a match for a Cloud DevOps role just because the job mentions Python once.
+  • If the candidate's domain (${candidate.technology}) doesn't match the job's primary domain, score should be LOW (under 40).
+
+- experienceScore (0–100): Does the candidate's experience level fit?
+  • 100 = perfect fit. 0 = massive gap.
+  • Only infer required years from EXPLICIT statements in the description (e.g. "5+ years required") or very clear title signals (Senior = ~5 yrs, Junior = 0–2 yrs).
+  • Do NOT invent experience requirements. If nothing is stated or implied, score 70 (neutral).
+
+- locationScore (0–100):
+  • 100 = remote job, or candidate's country matches job location.
+  • 50 = international but job mentions visa sponsorship.
+  • 0 = location mismatch with no sponsorship mentioned.
+  Candidate is in: ${candidate.country}
+
+- suitable (true/false): Is this genuinely a good match overall?
+  • true only if skillMatchScore >= 60 AND no disqualifying issues.
+
+- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons.
+  • Good: "Job primarily requires Azure/Kubernetes/DevOps; candidate's background is Python/Data Science"
+  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${candidate.experience_years} years"
+  • Bad: Do NOT say "requires 8 years" if the job description doesn't state it
+  • Empty array [] if the job is a genuine match.
+
+Return ONLY a valid JSON array, one object per job, in index order:
+[{"index":0,"suitable":true,"skillMatchScore":80,"experienceScore":70,"locationScore":100,"reasons":[]}, ...]`;
 
     const response = await getAI().models.generateContent({
       model: 'gemini-2.5-flash',
@@ -327,12 +367,18 @@ Return ONLY a JSON array in this exact format: [{"index": 0, "score": 85}, {"ind
     try {
       scores = JSON.parse(response.text || '[]');
     } catch {
-      scores = truncatedJobs.map((_: any, i: number) => ({ index: i, score: 50 }));
+      scores = truncatedJobs.map((_: any, i: number) => ({
+        index: i, suitable: false,
+        skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: []
+      }));
     }
 
     res.json({ scores });
   } catch (err: any) {
-    const fallback = (req.body?.jobs || []).map((_: any, i: number) => ({ index: i, score: 50 }));
+    const fallback = (req.body?.jobs || []).map((_: any, i: number) => ({
+      index: i, suitable: false,
+      skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: []
+    }));
     res.json({ scores: fallback, warning: err.message });
   }
 });

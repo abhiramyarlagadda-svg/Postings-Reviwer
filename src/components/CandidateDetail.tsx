@@ -158,11 +158,12 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
         body: JSON.stringify({ candidate, jobs })
       });
       const data = await res.json();
-      const scoreMap = new Map<number, number>();
-      (data.scores || []).forEach((s: any) => scoreMap.set(s.index, s.score));
+      const scoreMap = new Map<number, any>();
+      (data.scores || []).forEach((s: any) => scoreMap.set(s.index, s));
 
+      const defaultScore = { index: -1, suitable: false, skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: [] };
       const analysed = jobs.map((job, i) =>
-        calculateScores(candidate, job, scoreMap.get(i) ?? 50)
+        calculateScores(candidate, job, scoreMap.get(i) ?? { ...defaultScore, index: i })
       );
       const sorted = sortResults(analysed);
       setResults(sorted);
