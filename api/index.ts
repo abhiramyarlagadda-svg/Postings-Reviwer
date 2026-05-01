@@ -309,38 +309,17 @@ app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
         `Company: ${j.company}`,
         `Location: ${location || 'Not specified'}`,
         `Required Skills: ${skills || 'Not listed'}`,
-        `Description: ${(j.description || 'No description').substring(0, 800)}`,
+        `Description: ${(j.description || 'No description').substring(0, 600)}`,
       ].join('\n');
     }).join('\n\n');
 
     const companies = (candidate.companies_worked || []).join(', ') || 'none';
 
-    // Fetch and parse resume PDF so Gemini sees actual skills, not just profile fields
-    let resumeText = '';
-    if (candidate.resume_url) {
-      try {
-        const pdfRes = await fetch(candidate.resume_url);
-        if (pdfRes.ok) {
-          const buffer = Buffer.from(await pdfRes.arrayBuffer());
-          // Dynamic import avoids pdf-parse's module-level test-file read that crashes serverless
-          const { default: pdfParse } = await import('pdf-parse');
-          const parsed = await pdfParse(buffer);
-          resumeText = (parsed.text || '').trim().substring(0, 4000);
-        }
-      } catch { /* fall back to profile fields */ }
-    }
-
-    const candidateSection = resumeText
-      ? `=== CANDIDATE RESUME ===\n${resumeText}`
-      : `=== CANDIDATE PROFILE ===
-Primary Technology / Domain: ${candidate.technology}
-Total Work Experience: ${candidate.experience_years} years
-Location / Country: ${candidate.country}
-Previous Employers: ${companies}`;
-
     const prompt = `You are an expert technical recruiter. Carefully evaluate whether this candidate is a genuine match for each job listed.
 
-${candidateSection}
+=== CANDIDATE PROFILE ===
+Primary Technology / Domain: ${candidate.technology}
+Total Work Experience: ${candidate.experience_years} years
 Location / Country: ${candidate.country}
 Previous Employers: ${companies}
 
@@ -350,11 +329,10 @@ ${jobList}
 === YOUR TASK ===
 For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate honestly and return:
 
-- skillMatchScore (0–100): How well does the candidate's ACTUAL skills (from their resume above) align with what the job PRIMARILY requires?
-  • Read the resume carefully — what domain, technologies, and tools does the candidate actually know?
+- skillMatchScore (0–100): How well does the candidate's domain and skillset align with what the job PRIMARILY requires?
   • Base this on the job's CORE requirements, NOT incidental keyword overlap.
-  • Example: A Data Science/ML candidate is NOT a match for a Cloud DevOps role just because the job description mentions Python once.
-  • If the candidate's actual domain doesn't match the job's primary domain, score LOW (under 40).
+  • Example: A Python/Data Science/ML candidate is NOT a match for a Cloud DevOps/Kubernetes role just because the job description mentions Python once.
+  • If the candidate's primary domain (${candidate.technology}) doesn't match the job's primary domain, score LOW (under 40).
 
 - experienceScore (0–100): Does the candidate's experience level fit?
   • 100 = perfect fit. 0 = massive gap.
@@ -370,10 +348,10 @@ For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate ho
 - suitable (true/false): Is this genuinely a good match overall?
   • true only if skillMatchScore >= 60 AND no disqualifying issues.
 
-- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons based on the candidate's actual resume.
+- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons.
   • Good: "Job primarily requires Azure/Kubernetes/DevOps; candidate's background is Python/Data Science/ML"
-  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${candidate.experience_years} years total"
-  • Bad: Do NOT say "requires 8 years" if the job description doesn't state it explicitly
+  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${candidate.experience_years} years"
+  • Bad: Do NOT invent experience requirements not stated in the job description
   • Empty array [] if the job is a genuine match.
 
 Return ONLY a valid JSON array, one object per job, in index order:
@@ -387,21 +365,19 @@ Return ONLY a valid JSON array, one object per job, in index order:
 
     let scores: any[] = [];
     try {
-      scores = JSON.parse(response.text || '[]');
+      const parsed = JSON.parse(response.text || '[]');
+      scores = Array.isArray(parsed) ? parsed : [];
     } catch {
-      scores = truncatedJobs.map((_: any, i: number) => ({
-        index: i, suitable: false,
-        skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: []
-      }));
+      return res.status(500).json({ error: 'Gemini returned invalid JSON: ' + (response.text || '').substring(0, 200) });
+    }
+
+    if (scores.length === 0) {
+      return res.status(500).json({ error: 'Gemini returned empty results. Try again.' });
     }
 
     res.json({ scores });
   } catch (err: any) {
-    const fallback = (req.body?.jobs || []).map((_: any, i: number) => ({
-      index: i, suitable: false,
-      skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: []
-    }));
-    res.json({ scores: fallback, warning: err.message });
+    res.status(500).json({ error: 'AI analysis failed: ' + err.message });
   }
 });
 

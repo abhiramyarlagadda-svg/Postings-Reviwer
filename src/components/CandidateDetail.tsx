@@ -158,6 +158,8 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
         body: JSON.stringify({ candidate, jobs })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI analysis failed');
+
       const scoreMap = new Map<number, any>();
       (data.scores || []).forEach((s: any) => scoreMap.set(s.index, s));
 
