@@ -4,6 +4,7 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
 import bcrypt from 'bcryptjs';
+import pdfParse from 'pdf-parse';
 
 // RLS is disabled on all tables so anon key has full access server-side
 function getDb() {
@@ -309,17 +310,36 @@ app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
         `Company: ${j.company}`,
         `Location: ${location || 'Not specified'}`,
         `Required Skills: ${skills || 'Not listed'}`,
-        `Description: ${(j.description || 'No description').substring(0, 600)}`,
+        `Description: ${(j.description || 'No description').substring(0, 800)}`,
       ].join('\n');
     }).join('\n\n');
 
     const companies = (candidate.companies_worked || []).join(', ') || 'none';
 
-    const prompt = `You are an expert technical recruiter. Carefully evaluate whether this candidate is a genuine match for each job listed.
+    // Fetch and parse resume PDF so Gemini sees actual skills, not just profile fields
+    let resumeText = '';
+    if (candidate.resume_url) {
+      try {
+        const pdfRes = await fetch(candidate.resume_url);
+        if (pdfRes.ok) {
+          const buffer = Buffer.from(await pdfRes.arrayBuffer());
+          const parsed = await pdfParse(buffer);
+          resumeText = (parsed.text || '').trim().substring(0, 4000);
+        }
+      } catch { /* fall back to profile fields */ }
+    }
 
-=== CANDIDATE PROFILE ===
+    const candidateSection = resumeText
+      ? `=== CANDIDATE RESUME ===\n${resumeText}`
+      : `=== CANDIDATE PROFILE ===
 Primary Technology / Domain: ${candidate.technology}
 Total Work Experience: ${candidate.experience_years} years
+Location / Country: ${candidate.country}
+Previous Employers: ${companies}`;
+
+    const prompt = `You are an expert technical recruiter. Carefully evaluate whether this candidate is a genuine match for each job listed.
+
+${candidateSection}
 Location / Country: ${candidate.country}
 Previous Employers: ${companies}
 
@@ -329,10 +349,11 @@ ${jobList}
 === YOUR TASK ===
 For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate honestly and return:
 
-- skillMatchScore (0–100): How well does the candidate's actual skillset align with what the job PRIMARILY requires?
-  • Base this on the job's core requirements, NOT incidental keyword overlap.
-  • Example: a Python/Data Science candidate is NOT a match for a Cloud DevOps role just because the job mentions Python once.
-  • If the candidate's domain (${candidate.technology}) doesn't match the job's primary domain, score should be LOW (under 40).
+- skillMatchScore (0–100): How well does the candidate's ACTUAL skills (from their resume above) align with what the job PRIMARILY requires?
+  • Read the resume carefully — what domain, technologies, and tools does the candidate actually know?
+  • Base this on the job's CORE requirements, NOT incidental keyword overlap.
+  • Example: A Data Science/ML candidate is NOT a match for a Cloud DevOps role just because the job description mentions Python once.
+  • If the candidate's actual domain doesn't match the job's primary domain, score LOW (under 40).
 
 - experienceScore (0–100): Does the candidate's experience level fit?
   • 100 = perfect fit. 0 = massive gap.
@@ -348,10 +369,10 @@ For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate ho
 - suitable (true/false): Is this genuinely a good match overall?
   • true only if skillMatchScore >= 60 AND no disqualifying issues.
 
-- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons.
-  • Good: "Job primarily requires Azure/Kubernetes/DevOps; candidate's background is Python/Data Science"
-  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${candidate.experience_years} years"
-  • Bad: Do NOT say "requires 8 years" if the job description doesn't state it
+- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons based on the candidate's actual resume.
+  • Good: "Job primarily requires Azure/Kubernetes/DevOps; candidate's background is Python/Data Science/ML"
+  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${candidate.experience_years} years total"
+  • Bad: Do NOT say "requires 8 years" if the job description doesn't state it explicitly
   • Empty array [] if the job is a genuine match.
 
 Return ONLY a valid JSON array, one object per job, in index order:
