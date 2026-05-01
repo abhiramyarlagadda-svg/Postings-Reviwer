@@ -4,7 +4,6 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
 import bcrypt from 'bcryptjs';
-import pdfParse from 'pdf-parse';
 
 // RLS is disabled on all tables so anon key has full access server-side
 function getDb() {
@@ -323,6 +322,8 @@ app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
         const pdfRes = await fetch(candidate.resume_url);
         if (pdfRes.ok) {
           const buffer = Buffer.from(await pdfRes.arrayBuffer());
+          // Dynamic import avoids pdf-parse's module-level test-file read that crashes serverless
+          const { default: pdfParse } = await import('pdf-parse');
           const parsed = await pdfParse(buffer);
           resumeText = (parsed.text || '').trim().substring(0, 4000);
         }
