@@ -182,7 +182,7 @@ app.post('/api/candidates', authenticate, upload.single('resume'), async (req: a
 
 app.get('/api/jobs', authenticate, async (req: any, res) => {
   try {
-    const { date_from, technology, page = '1', limit = '20' } = req.query;
+    const { date_from, date_to, technology, page = '1', limit = '20' } = req.query;
 
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
@@ -192,6 +192,8 @@ app.get('/api/jobs', authenticate, async (req: any, res) => {
     let query = jobsDb.from('jobs').select('*', { count: 'exact' }).eq('status', 'active');
 
     if (date_from) query = query.gte('posted_at', date_from);
+    // date_to is the exclusive upper bound (e.g. pass "2026-05-01" to get only April 30)
+    if (date_to) query = query.lt('posted_at', date_to);
 
     if (technology) {
       const tech = String(technology).replace(/[,()%{}*]/g, ' ').trim();

@@ -17,6 +17,7 @@ type QuickFilter = 'today' | 'yesterday' | 'week' | 'all' | null;
 export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const { token } = useAuth();
   const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
@@ -38,16 +39,18 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
   useEffect(() => { tokenRef.current = token; }, [token]);
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
 
-  const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>, dateOverride?: string) => {
+  const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>, dateOverride?: string, dateToOverride?: string) => {
     setLoadingJobs(true);
     setResults(null);
     setSavedCount(null);
     setError('');
     setUploadedSource(false);
     try {
-      const effectiveDate = dateOverride !== undefined ? dateOverride : dateFrom;
+      const effectiveFrom = dateOverride !== undefined ? dateOverride : dateFrom;
+      const effectiveTo   = dateToOverride !== undefined ? dateToOverride : dateTo;
       const params = new URLSearchParams({ page: String(p), limit: '20' });
-      if (effectiveDate) params.set('date_from', effectiveDate);
+      if (effectiveFrom) params.set('date_from', effectiveFrom);
+      if (effectiveTo)   params.set('date_to',   effectiveTo);
       if (candidate.technology) params.set('technology', candidate.technology);
 
       const res = await fetch(`/api/jobs?${params}`, { headers: authHeaders() });
@@ -70,7 +73,7 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
     } finally {
       setLoadingJobs(false);
     }
-  }, [candidate.technology, dateFrom, authHeaders, analysedJobIds]);
+  }, [candidate.technology, dateFrom, dateTo, authHeaders, analysedJobIds]);
 
   // On candidate change: load already-analysed IDs first, then fetch filtered jobs
   useEffect(() => {
@@ -93,19 +96,38 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
 
   const handleQuickFilter = (preset: 'today' | 'yesterday' | 'week' | 'all') => {
     const now = new Date();
-    let date = '';
-    if (preset === 'today') date = toDateStr(now);
-    else if (preset === 'yesterday') { const y = new Date(now); y.setDate(now.getDate() - 1); date = toDateStr(y); }
-    else if (preset === 'week') { const w = new Date(now); w.setDate(now.getDate() - 6); date = toDateStr(w); }
+    let from = '';
+    let to = '';
+
+    if (preset === 'today') {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      from = toDateStr(now);
+      to   = toDateStr(tomorrow); // exclusive upper bound
+    } else if (preset === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      from = toDateStr(yesterday);
+      to   = toDateStr(now);      // exclusive upper bound (= today)
+    } else if (preset === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 6);
+      from = toDateStr(weekAgo);
+      // no upper bound — show everything up to now
+    }
+    // 'all': both remain ''
+
     setQuickFilter(preset);
-    setDateFrom(date);
-    fetchJobs(1, analysedJobIds, date);
+    setDateFrom(from);
+    setDateTo(to);
+    fetchJobs(1, analysedJobIds, from, to);
   };
 
   const handleDateChange = (val: string) => {
     setDateFrom(val);
+    setDateTo('');
     setQuickFilter(null);
-    fetchJobs(1, analysedJobIds, val);
+    fetchJobs(1, analysedJobIds, val, '');
   };
 
   const handleAnalyse = async () => {
