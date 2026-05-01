@@ -28,21 +28,17 @@ interface Application {
 type StatusFilter = 'all' | 'relevant' | 'irrelevant';
 
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
-  const [display, setDisplay] = useState(value);
+  const [display, setDisplay] = useState(0); // start at 0 so it counts up on first load
 
   useEffect(() => {
     if (display === value) return;
-    const delay = Math.abs(value - display) > 5 ? 18 : 45;
+    const diff = Math.abs(value - display);
+    const delay = diff > 10 ? 12 : diff > 3 ? 25 : 50;
     const timer = setTimeout(() => {
       setDisplay(prev => prev + (value > prev ? 1 : -1));
     }, delay);
     return () => clearTimeout(timer);
   }, [display, value]);
-
-  // Reset immediately when value jumps up significantly (fresh data load)
-  useEffect(() => {
-    if (value - display > 20) setDisplay(0);
-  }, [value]);
 
   return <span className={className}>{display}</span>;
 }
@@ -84,19 +80,19 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
 
   useEffect(() => { fetchApps(); }, [fetchApps]);
 
-  const toggle = (id: string, isIrrelevant?: boolean) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        if (isIrrelevant) {
-          setReviewedIds(r => { const nr = new Set(r); nr.add(id); return nr; });
-        }
-      }
-      return next;
-    });
+  const toggle = (id: string, isIrrelevant?: boolean, hasReasons?: boolean) => {
+    // Always mark as reviewed on first click
+    if (isIrrelevant) {
+      setReviewedIds(r => { const nr = new Set(r); nr.add(id); return nr; });
+    }
+    // Only expand/collapse if there are red flags to show
+    if (hasReasons) {
+      setExpanded(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+    }
   };
 
   const showToast = (msg: string) => {
@@ -433,13 +429,11 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                           </span>
                         ) : (
                           <button
-                            onClick={() => hasReasons && toggle(app.id, true)}
+                            onClick={() => toggle(app.id, true, hasReasons)}
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider border transition-all ${
                               isReviewed
-                                ? 'bg-gray-50 text-gray-400 border-gray-200'
-                                : hasReasons
-                                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 cursor-pointer'
-                                  : 'bg-red-50 text-red-600 border-red-200 cursor-default'
+                                ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-default'
+                                : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 cursor-pointer'
                             }`}
                           >
                             {isReviewed ? (
