@@ -10,7 +10,18 @@ interface Props {
   appsRevision?: number;
 }
 
-const toDateStr = (d: Date) => d.toISOString().split('T')[0];
+// Local YYYY-MM-DD for the date picker input value
+const toDateStr = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Local midnight as a UTC ISO string so the API filter aligns with what
+// toLocaleDateString() shows in the table (avoids UTC vs local mismatch)
+const localMidnightISO = (d: Date): string =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
 
 type QuickFilter = 'today' | 'yesterday' | 'week' | 'all' | null;
 
@@ -96,38 +107,43 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
 
   const handleQuickFilter = (preset: 'today' | 'yesterday' | 'week' | 'all') => {
     const now = new Date();
-    let from = '';
-    let to = '';
+    // API filter params use local-midnight UTC so they match toLocaleDateString() display
+    let apiFrom = '';
+    let apiTo   = '';
+    // Date picker display value (YYYY-MM-DD in local time)
+    let displayFrom = '';
 
     if (preset === 'today') {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(now.getDate() + 1);
-      from = toDateStr(now);
-      to   = toDateStr(tomorrow); // exclusive upper bound
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      apiFrom     = localMidnightISO(now);
+      apiTo       = localMidnightISO(tomorrow);
+      displayFrom = toDateStr(now);
     } else if (preset === 'yesterday') {
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      from = toDateStr(yesterday);
-      to   = toDateStr(now);      // exclusive upper bound (= today)
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      apiFrom     = localMidnightISO(yesterday);
+      apiTo       = localMidnightISO(now); // exclusive: everything before local midnight today
+      displayFrom = toDateStr(yesterday);
     } else if (preset === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 6);
-      from = toDateStr(weekAgo);
-      // no upper bound — show everything up to now
+      const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      apiFrom     = localMidnightISO(weekAgo);
+      displayFrom = toDateStr(weekAgo);
+      // no upper bound
     }
-    // 'all': both remain ''
+    // 'all': all remain ''
 
     setQuickFilter(preset);
-    setDateFrom(from);
-    setDateTo(to);
-    fetchJobs(1, analysedJobIds, from, to);
+    setDateFrom(displayFrom);
+    setDateTo('');
+    fetchJobs(1, analysedJobIds, apiFrom, apiTo);
   };
 
   const handleDateChange = (val: string) => {
     setDateFrom(val);
     setDateTo('');
     setQuickFilter(null);
-    fetchJobs(1, analysedJobIds, val, '');
+    // val is 'YYYY-MM-DD' from the date picker — parse as local date for accurate midnight
+    const apiFrom = val ? localMidnightISO(new Date(val + 'T00:00:00')) : '';
+    fetchJobs(1, analysedJobIds, apiFrom, '');
   };
 
   const handleAnalyse = async () => {
