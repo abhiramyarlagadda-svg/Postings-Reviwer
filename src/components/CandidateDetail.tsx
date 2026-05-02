@@ -10,6 +10,19 @@ interface Props {
   appsRevision?: number;
 }
 
+// Animated number that starts at `from` and steps toward `to`
+function AnimatedCountdown({ from, to, className }: { from: number; to: number; className?: string }) {
+  const [display, setDisplay] = useState(from);
+  useEffect(() => {
+    if (display === to) return;
+    const diff = Math.abs(to - display);
+    const delay = diff > 10 ? 40 : diff > 3 ? 80 : 130;
+    const id = setTimeout(() => setDisplay(prev => prev + (to > prev ? 1 : -1)), delay);
+    return () => clearTimeout(id);
+  }, [display, to]);
+  return <span className={className}>{display}</span>;
+}
+
 // Local YYYY-MM-DD for the date picker input value
 const toDateStr = (d: Date): string => {
   const y = d.getFullYear();
@@ -45,11 +58,30 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [analysedJobIds, setAnalysedJobIds] = useState<Set<string>>(new Set());
   const [hiddenJobsCount, setHiddenJobsCount] = useState(0);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
 
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
   const isInitialMount = useRef(true);
+
+  // Simulate per-job progress while analysis is in flight
+  useEffect(() => {
+    if (!analysing || jobs.length <= 1) {
+      setAnalysisProgress(0);
+      return;
+    }
+    const total = jobs.length;
+    // Pace: spread across 80% of estimated time, stop 1 before total to avoid false "done"
+    const intervalMs = Math.max(400, Math.min(2000, (total * 600) / (total - 1)));
+    const id = setInterval(() => {
+      setAnalysisProgress(prev => {
+        if (prev >= total - 1) { clearInterval(id); return prev; }
+        return prev + 1;
+      });
+    }, intervalMs);
+    return () => { clearInterval(id); setAnalysisProgress(0); };
+  }, [analysing]);
 
   const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>, dateOverride?: string, dateToOverride?: string) => {
     setLoadingJobs(true);
@@ -399,17 +431,35 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
               </div>
               <div className="text-center">
                 <h3 className="text-lg font-bold text-green-900 uppercase tracking-wide">AI Analysing</h3>
-                <p className="text-sm text-green-700 mt-1">
-                  Matching <span className="font-bold">{jobs.length}</span> jobs against {candidate.name}'s profile...
+                <p className="text-sm text-green-600 mt-1">
+                  {candidate.name}'s profile vs {jobs.length} jobs
                 </p>
-                <div className="mt-4 flex items-center justify-center gap-2">
+
+                {/* Animated countdown */}
+                <div className="mt-5 flex flex-col items-center gap-1">
+                  <AnimatedCountdown
+                    from={jobs.length}
+                    to={Math.max(0, jobs.length - analysisProgress)}
+                    className="text-6xl font-black text-green-700 tabular-nums leading-none"
+                  />
+                  <span className="text-xs font-bold uppercase tracking-widest text-green-500 mt-1">
+                    jobs remaining
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="mt-4 h-1.5 w-full bg-green-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-600 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${jobs.length > 0 ? (analysisProgress / jobs.length) * 100 : 0}%` }}
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center justify-center gap-2">
                   <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                   <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                   <div className="w-2 h-2 bg-green-700 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
-                <p className="text-[10px] text-green-500 mt-3 uppercase tracking-widest">
-                  Saving results to applications...
-                </p>
               </div>
             </div>
           </div>
