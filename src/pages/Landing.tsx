@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from '@/src/components/ui/button';
 import { useAuth } from '@/src/lib/AuthContext';
+import ncplLogo from '/ncpl-logo.png';
 
 export default function Landing() {
   const { user } = useAuth();
@@ -10,10 +11,8 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-green-50 text-green-900 font-sans flex flex-col overflow-hidden selection:bg-green-200 selection:text-green-900">
       <header className="h-16 bg-green-700 text-white flex items-center justify-between px-6 md:px-8 border-b-4 border-green-800 shrink-0 relative z-20">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-white rounded-sm flex items-center justify-center shadow-inner">
-            <div className="w-4 h-4 bg-green-700"></div>
-          </div>
+        <div className="flex items-center gap-3">
+          <img src={ncplLogo} alt="NCPL Logo" className="h-9 w-auto" />
           <h1 className="text-xl font-bold tracking-tight">POSTINGS REVIEWER <span className="font-light opacity-80 text-[10px] uppercase tracking-widest align-middle">| AI System</span></h1>
         </div>
           <div className="flex items-center gap-2">
