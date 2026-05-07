@@ -65,22 +65,6 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
   const isInitialMount = useRef(true);
 
-  // Simulate per-job progress while analysis is in flight
-  useEffect(() => {
-    if (!analysing || jobs.length <= 1) {
-      setAnalysisProgress(0);
-      return;
-    }
-    const total = jobs.length;
-    const intervalMs = Math.max(400, Math.min(2000, (total * 600) / (total - 1)));
-    const id = setInterval(() => {
-      setAnalysisProgress(prev => {
-        if (prev >= total - 1) { clearInterval(id); return prev; }
-        return prev + 1;
-      });
-    }, intervalMs);
-    return () => { clearInterval(id); setAnalysisProgress(0); };
-  }, [analysing]);
 
   const fetchJobs = useCallback(async (p = 1, excludeIds?: Set<string>, dateOverride?: string, dateToOverride?: string) => {
     setLoadingJobs(true);
@@ -189,19 +173,52 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const handleAnalyse = async () => {
     if (jobs.length === 0) return;
     setAnalysing(true);
+    setAnalysisProgress(0);
     setError('');
     setSavedCount(null);
     try {
-      const res = await fetch('/api/ai/analyse', {
+      const response = await fetch('/api/ai/analyse-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ candidate, jobs })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'AI analysis failed');
+
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error((data as any).error || 'AI analysis failed');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalScores: any[] = [];
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'progress') {
+              setAnalysisProgress(event.completed);
+            } else if (event.type === 'done') {
+              finalScores = event.scores ?? [];
+              break outer;
+            } else if (event.type === 'error') {
+              throw new Error(event.message || 'AI analysis failed');
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message && parseErr.message !== 'Unexpected end of JSON input') throw parseErr;
+          }
+        }
+      }
 
       const scoreMap = new Map<number, any>();
-      (data.scores || []).forEach((s: any) => scoreMap.set(s.index, s));
+      finalScores.forEach((s: any) => scoreMap.set(s.index, s));
 
       const defaultScore = { index: -1, suitable: false, skillMatchScore: 50, experienceScore: 50, locationScore: 50, reasons: [] };
       const analysed = jobs.map((job, i) =>
@@ -247,6 +264,7 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
       setError('AI analysis failed: ' + e.message);
     } finally {
       setAnalysing(false);
+      setAnalysisProgress(0);
     }
   };
 
@@ -435,7 +453,7 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
                   {candidate.name}'s profile vs {jobs.length} jobs
                 </p>
 
-                {/* Animated countdown */}
+                {/* Real-time countdown — decrements as each job finishes */}
                 <div className="mt-5 flex flex-col items-center gap-1">
                   <AnimatedCountdown
                     from={jobs.length}
@@ -445,13 +463,18 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
                   <span className="text-xs font-bold uppercase tracking-widest text-green-500 mt-1">
                     jobs remaining
                   </span>
+                  {analysisProgress > 0 && (
+                    <span className="text-xs text-green-400 mt-0.5">
+                      {analysisProgress} of {jobs.length} analysed
+                    </span>
+                  )}
                 </div>
 
-                {/* Progress bar — capped at 90% so it never falsely shows complete */}
+                {/* Progress bar — fills in real time as jobs complete */}
                 <div className="mt-4 h-1.5 w-full bg-green-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-green-600 rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${jobs.length > 0 ? Math.min(90, (analysisProgress / jobs.length) * 100) : 0}%` }}
+                    className="h-full bg-green-600 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${jobs.length > 0 ? (analysisProgress / jobs.length) * 100 : 0}%` }}
                   />
                 </div>
 

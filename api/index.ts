@@ -388,6 +388,119 @@ app.post('/api/applications/analyse', authenticate, async (req: any, res) => {
 
 // ─── AI ANALYSIS ───────────────────────────────────────────────────────────────
 
+function buildSingleJobPrompt(candidate: any, job: any, index: number): string {
+  const tech = sanitize(candidate.technology);
+  const country = sanitize(candidate.country);
+  const expYears = parseInt(candidate.experience_years) || 0;
+  const companies = sanitize((candidate.companies_worked || []).join(', ') || 'none', 500);
+  const skills = Array.isArray(job.skills) ? job.skills.join(', ') : '';
+  const location = job.is_remote ? 'Remote' : `${job.location || ''} ${job.country || ''}`.trim();
+
+  return `You are an expert technical recruiter. Evaluate whether this candidate matches this specific job.
+
+=== CANDIDATE PROFILE ===
+Primary Technology / Domain: ${tech}
+Total Work Experience: ${expYears} years
+Location / Country: ${country}
+Previous Employers: ${companies}
+
+=== JOB TO EVALUATE (index ${index}) ===
+Title: ${sanitize(job.title)}
+Company: ${sanitize(job.company)}
+Location: ${location || 'Not specified'}
+Required Skills: ${skills || 'Not listed'}
+Description: ${(job.description || 'No description').substring(0, 600)}
+
+=== YOUR TASK ===
+Return ONLY a valid JSON object (no array, no extra text):
+{"suitable":true,"skillMatchScore":80,"experienceScore":70,"locationScore":100,"reasons":[]}
+
+Rules:
+- skillMatchScore (0-100): Core domain alignment. If candidate's primary domain (${tech}) doesn't match job's primary domain, score LOW (under 40).
+- experienceScore (0-100): Experience level fit. If no years stated in job description, score 70 (neutral).
+- locationScore (0-100): 100=remote or country match, 50=visa sponsorship mentioned, 0=location mismatch.
+- suitable (true/false): true only if skillMatchScore >= 60 AND no disqualifying issues.
+- reasons: SPECIFIC factual reasons for unsuitable/borderline jobs. Empty [] if good match.`;
+}
+
+// Streaming endpoint — processes each job individually and emits SSE progress events
+app.post('/api/ai/analyse-stream', authenticate, async (req: any, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (data: object) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+  };
+
+  try {
+    const { candidate, jobs } = req.body;
+    if (!candidate || !Array.isArray(jobs) || jobs.length === 0) {
+      send({ type: 'done', scores: [] });
+      res.end();
+      return;
+    }
+
+    const truncatedJobs = jobs.slice(0, 50);
+    const allScores: any[] = new Array(truncatedJobs.length).fill(null);
+    let completedCount = 0;
+
+    const analyseJob = async (job: any, i: number): Promise<void> => {
+      const prompt = buildSingleJobPrompt(candidate, job, i);
+      try {
+        const response = await Promise.race([
+          getAI().models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json', temperature: 0.1 }
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 30000))
+        ]);
+        const parsed = JSON.parse((response as any).text || '{}');
+        allScores[i] = {
+          index: i,
+          suitable: !!parsed.suitable,
+          skillMatchScore: Math.min(100, Math.max(0, Number(parsed.skillMatchScore) || 50)),
+          experienceScore: Math.min(100, Math.max(0, Number(parsed.experienceScore) || 50)),
+          locationScore: Math.min(100, Math.max(0, Number(parsed.locationScore) || 50)),
+          reasons: Array.isArray(parsed.reasons) ? parsed.reasons : []
+        };
+      } catch {
+        allScores[i] = {
+          index: i,
+          suitable: false,
+          skillMatchScore: 50,
+          experienceScore: 50,
+          locationScore: 50,
+          reasons: ['Analysis could not be completed for this job']
+        };
+      }
+      completedCount++;
+      send({ type: 'progress', completed: completedCount, total: truncatedJobs.length });
+    };
+
+    // Process with concurrency limit of 5
+    const CONCURRENCY = 5;
+    const queue = truncatedJobs.map((job: any, i: number) => ({ job, i }));
+    const workers = Array(Math.min(CONCURRENCY, queue.length)).fill(null).map(async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (item) await analyseJob(item.job, item.i);
+      }
+    });
+
+    await Promise.all(workers);
+
+    send({ type: 'done', scores: allScores.filter((s: any) => s !== null) });
+  } catch (err: any) {
+    send({ type: 'error', message: err.message });
+  } finally {
+    res.end();
+  }
+});
+
+// Legacy batch endpoint (kept for compatibility)
 app.post('/api/ai/analyse', authenticate, async (req: any, res) => {
   try {
     const { candidate, jobs } = req.body;
@@ -424,34 +537,7 @@ Previous Employers: ${companies}
 ${jobList}
 
 === YOUR TASK ===
-For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate honestly and return:
-
-- skillMatchScore (0–100): How well does the candidate's domain and skillset align with what the job PRIMARILY requires?
-  • Base this on the job's CORE requirements, NOT incidental keyword overlap.
-  • Example: A Python/Data Science/ML candidate is NOT a match for a Cloud DevOps/Kubernetes role just because the job description mentions Python once.
-  • If the candidate's primary domain (${tech}) doesn't match the job's primary domain, score LOW (under 40).
-
-- experienceScore (0–100): Does the candidate's experience level fit?
-  • 100 = perfect fit. 0 = massive gap.
-  • Only infer required years from EXPLICIT statements in the description (e.g. "5+ years required") or very clear title signals (Senior = ~5 yrs, Junior = 0–2 yrs).
-  • Do NOT invent experience requirements. If nothing is stated or implied, score 70 (neutral).
-
-- locationScore (0–100):
-  • 100 = remote job, or candidate's country matches job location.
-  • 50 = international but job mentions visa sponsorship.
-  • 0 = location mismatch with no sponsorship mentioned.
-  Candidate is in: ${country}
-
-- suitable (true/false): Is this genuinely a good match overall?
-  • true only if skillMatchScore >= 60 AND no disqualifying issues.
-
-- reasons (string array): For unsuitable or borderline jobs only — state SPECIFIC, FACTUAL reasons.
-  • Good: "Job primarily requires Azure/Kubernetes/DevOps; candidate's background is Python/Data Science/ML"
-  • Good: "Job explicitly requires 5+ years cloud architecture experience; candidate has ${expYears} years"
-  • Bad: Do NOT invent experience requirements not stated in the job description
-  • Empty array [] if the job is a genuine match.
-
-Return ONLY a valid JSON array, one object per job, in index order:
+For EACH job (index 0 to ${truncatedJobs.length - 1}), evaluate the candidate honestly and return a valid JSON array:
 [{"index":0,"suitable":true,"skillMatchScore":80,"experienceScore":70,"locationScore":100,"reasons":[]}, ...]`;
 
     const timeoutPromise = new Promise<never>((_, reject) =>
