@@ -17,18 +17,21 @@ export default function Register() {
   const { login, user } = useAuth();
 
   React.useEffect(() => {
-    if (user) {
-      navigate('/dashboard');
-    }
+    if (user) navigate('/dashboard');
   }, [user, navigate]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -44,7 +47,7 @@ export default function Register() {
       <Card className="w-full max-w-md shadow-lg border-2 border-green-300 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-green-600"></div>
         <CardHeader className="pt-8 pb-4 text-center border-b-0 space-y-2">
-           <div className="mx-auto w-12 h-12 bg-green-700 text-white rounded flex items-center justify-center font-bold text-lg mb-2 shadow-inner border border-green-800">
+          <div className="mx-auto w-12 h-12 bg-green-700 text-white rounded flex items-center justify-center font-bold text-lg mb-2 shadow-inner border border-green-800">
             PR
           </div>
           <CardTitle className="text-lg font-black tracking-tight text-green-900 uppercase">Create Account</CardTitle>
@@ -52,28 +55,60 @@ export default function Register() {
         </CardHeader>
         <CardContent className="p-8 pt-4">
           <form onSubmit={handleRegister} className="space-y-5">
-            {error && <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded text-xs font-bold uppercase tracking-wider">{error}</div>}
+            {error && (
+              <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded text-xs font-bold uppercase tracking-wider">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} className="h-12 border-green-300 font-medium" />
+              <Input
+                id="name"
+                required
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="h-12 border-green-300 font-medium"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 border-green-300 font-medium" />
+              <Input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="h-12 border-green-300 font-medium"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 border-green-300 font-medium tracking-widest pr-10" />
-                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 hover:text-green-800">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="h-12 border-green-300 font-medium tracking-widest pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 hover:text-green-800"
+                >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <p className="text-[10px] text-green-500">Minimum 6 characters</p>
             </div>
             <Button type="submit" className="w-full h-12 text-sm shadow-sm pt-3 mt-4">SIGN UP</Button>
           </form>
           <div className="mt-8 pt-6 border-t border-green-100 text-center text-xs font-medium text-green-700 uppercase tracking-wider">
-            Already have an account? <Link to="/login" className="font-bold text-green-900 border-b-2 border-green-700 pb-0.5 hover:text-green-700 transition">Login</Link>
+            Already have an account?{' '}
+            <Link to="/login" className="font-bold text-green-900 border-b-2 border-green-700 pb-0.5 hover:text-green-700 transition">
+              Login
+            </Link>
           </div>
         </CardContent>
       </Card>

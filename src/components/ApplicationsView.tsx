@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Eye, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 
@@ -49,7 +49,9 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [candidateFilter, setCandidateFilter] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
@@ -336,8 +338,13 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
           <input
             type="text"
             placeholder="Search by candidate, job title or company..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={e => {
+              const val = e.target.value;
+              setSearchInput(val);
+              if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+              searchDebounceRef.current = setTimeout(() => setSearch(val), 300);
+            }}
             className="text-xs text-green-800 outline-none bg-transparent w-full"
           />
         </div>

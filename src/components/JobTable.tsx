@@ -29,6 +29,10 @@ export default function JobTable({
     });
   };
 
+  const relevantCount = analysed ? results!.filter(r => r.suitable).length : 0;
+  const notSuitableCount = analysed ? results!.filter(r => !r.suitable).length : 0;
+  const totalCount = analysed ? results!.length : 0;
+
   const items: (JobResult | { job: Job })[] = analysed
     ? results!.filter(r => {
         if (filterApplied === 'relevant') return r.suitable;
@@ -39,20 +43,29 @@ export default function JobTable({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Filter tabs — only show relevance tabs after analysis */}
+      {/* Filter tabs — only show after analysis */}
       {analysed && (
         <div className="flex items-center gap-2 mb-3">
-          {(['all', 'relevant', 'not_suitable'] as const).map(f => (
+          {([
+            ['all', 'All', totalCount],
+            ['relevant', 'Relevant', relevantCount],
+            ['not_suitable', 'Not Suitable', notSuitableCount],
+          ] as [typeof filterApplied, string, number][]).map(([f, label, count]) => (
             <button
               key={f}
               onClick={() => onFilterChange(f)}
-              className={`text-xs font-bold uppercase tracking-widest px-4 py-2 rounded transition-colors ${
+              className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded transition-colors ${
                 filterApplied === f
                   ? 'bg-green-700 text-white'
                   : 'bg-white text-green-700 border border-green-200 hover:bg-green-50'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'relevant' ? 'Relevant' : 'Not Suitable'}
+              {label}
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                filterApplied === f ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'
+              }`}>
+                {count}
+              </span>
             </button>
           ))}
         </div>
@@ -90,7 +103,7 @@ export default function JobTable({
                   <React.Fragment key={j.id}>
                     <tr className="hover:bg-green-50/40">
                       <td className="px-4 py-3 text-green-900 font-semibold text-sm max-w-[260px]">
-                        {j.title}
+                        <span title={j.title}>{j.title}</span>
                       </td>
                       <td className="px-4 py-3 text-green-700 font-medium text-sm">{j.company}</td>
                       <td className="px-4 py-3 text-green-600 text-sm">
@@ -248,7 +261,6 @@ function Pagination({ page, totalPages, onPageChange }: { page: number; totalPag
         </button>
       </div>
 
-      {/* Jump to page */}
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-widest text-green-600 font-bold">Jump to</span>
         <input

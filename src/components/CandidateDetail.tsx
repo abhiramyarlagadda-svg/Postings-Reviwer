@@ -447,11 +447,11 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
                   </span>
                 </div>
 
-                {/* Progress bar */}
+                {/* Progress bar — capped at 90% so it never falsely shows complete */}
                 <div className="mt-4 h-1.5 w-full bg-green-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-green-600 rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${jobs.length > 0 ? (analysisProgress / jobs.length) * 100 : 0}%` }}
+                    style={{ width: `${jobs.length > 0 ? Math.min(90, (analysisProgress / jobs.length) * 100) : 0}%` }}
                   />
                 </div>
 

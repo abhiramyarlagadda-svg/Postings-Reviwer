@@ -16,12 +16,11 @@ export default function Login() {
   const { login, user } = useAuth();
 
   React.useEffect(() => {
-    if (user) {
-      navigate('/dashboard');
-    }
+    if (user) navigate('/dashboard');
   }, [user, navigate]);
 
   const handleDemoLogin = async () => {
+    setError('');
     try {
       let res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -49,11 +48,12 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: email.trim(), password })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -77,25 +77,57 @@ export default function Login() {
         </CardHeader>
         <CardContent className="p-8">
           <form onSubmit={handleLogin} className="space-y-6">
-            {error && <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded text-xs font-bold uppercase tracking-wider">{error}</div>}
+            {error && (
+              <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded text-xs font-bold uppercase tracking-wider">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 border-green-300 font-medium" />
+              <Input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="h-12 border-green-300 font-medium"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 border-green-300 font-medium tracking-widest pr-10" />
-                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 hover:text-green-800">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="h-12 border-green-300 font-medium tracking-widest pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 hover:text-green-800"
+                >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
             <Button type="submit" className="w-full h-12 text-sm shadow-sm pt-3">LOGIN</Button>
-            <Button type="button" onClick={handleDemoLogin} variant="secondary" className="w-full h-12 text-sm shadow-sm pt-3 mt-4">DEMO LOGIN (NO CREDS)</Button>
+            <Button
+              type="button"
+              onClick={handleDemoLogin}
+              variant="secondary"
+              className="w-full h-12 text-sm shadow-sm pt-3 mt-4"
+            >
+              DEMO LOGIN (NO CREDS)
+            </Button>
           </form>
           <div className="mt-8 pt-6 border-t border-green-100 text-center text-xs font-medium text-green-700 uppercase tracking-wider">
-            Don't have an account? <Link to="/register" className="font-bold text-green-900 border-b-2 border-green-700 pb-0.5 hover:text-green-700 transition">Sign up</Link>
+            Don't have an account?{' '}
+            <Link to="/register" className="font-bold text-green-900 border-b-2 border-green-700 pb-0.5 hover:text-green-700 transition">
+              Sign up
+            </Link>
           </div>
         </CardContent>
       </Card>

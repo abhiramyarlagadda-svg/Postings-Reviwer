@@ -216,6 +216,21 @@ export default function Dashboard() {
 
   useEffect(() => { fetchCandidates(); }, []);
 
+  const handleDeleteCandidate = async (id: string) => {
+    try {
+      const res = await fetch(`/api/candidates/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      setCandidates(prev => prev.filter(c => c.id !== id));
+      if (selectedId === id) {
+        const remaining = candidates.filter(c => c.id !== id);
+        setSelectedId(remaining.length > 0 ? remaining[0].id : null);
+      }
+    } catch { /* ignore */ }
+  };
+
   const handleLogout = () => { logout(); navigate('/'); };
   const selected = candidates.find(c => c.id === selectedId) || null;
 
@@ -295,6 +310,7 @@ export default function Dashboard() {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onAdd={() => setShowAdd(true)}
+                onDelete={handleDeleteCandidate}
                 loading={loading}
               />
             </div>
