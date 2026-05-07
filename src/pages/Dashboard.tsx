@@ -229,6 +229,9 @@ export default function Dashboard() {
             </div>
             <span className="text-sm font-bold tracking-tight">POSTINGS REVIEWER</span>
           </div>
+          <div className="bg-white rounded px-2 py-1 flex items-center">
+            <img src="/ncpl-logo.png" alt="NCPL" className="h-7 w-auto object-contain" style={{ imageRendering: 'auto' }} />
+          </div>
           {/* Nav tabs */}
           <div className="flex items-center gap-1 bg-green-800 rounded p-0.5">
             <button
@@ -251,7 +254,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          <img src="/ncpl-logo.png" alt="NCPL" className="h-8 w-auto object-contain" />
           <div className="relative">
           <button
             onClick={() => setProfileOpen(o => !o)}
