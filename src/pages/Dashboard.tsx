@@ -250,7 +250,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="relative">
+        <div className="flex items-center gap-3">
+          <img src="/ncpl-logo.png" alt="NCPL" className="h-8 w-auto object-contain" />
+          <div className="relative">
           <button
             onClick={() => setProfileOpen(o => !o)}
             className="w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-sm flex items-center justify-center hover:bg-green-200 transition-colors border border-green-500"
@@ -274,6 +276,7 @@ export default function Dashboard() {
               </div>
             </>
           )}
+          </div>
         </div>
       </header>
 
