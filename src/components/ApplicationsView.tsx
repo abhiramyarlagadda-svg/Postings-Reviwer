@@ -50,7 +50,6 @@ function ResumeModal({ name, url, onClose }: { name: string; url: string; onClos
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="flex-1 flex flex-col m-4 md:m-8 bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Modal header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-green-100 bg-green-50 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-green-700 flex items-center justify-center">
@@ -62,49 +61,38 @@ function ResumeModal({ name, url, onClose }: { name: string; url: string; onClos
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors"
-            >
+            <a href={url} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors">
               <Maximize2 className="w-3 h-3" /> Open Full
             </a>
-            <a
-              href={url}
-              download
-              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 transition-colors"
-            >
+            <a href={url} download
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 transition-colors">
               <Download className="w-3 h-3" /> Download
             </a>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg text-green-400 hover:text-green-800 hover:bg-green-100 transition-colors"
-            >
+            <button onClick={onClose} className="p-2 rounded-lg text-green-400 hover:text-green-800 hover:bg-green-100 transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
-        {/* Resume frame */}
         <div className="flex-1 overflow-hidden bg-gray-100">
-          <iframe
-            src={viewerUrl}
-            className="w-full h-full border-0"
-            title={`${name} Resume`}
-          />
+          <iframe src={viewerUrl} className="w-full h-full border-0" title={`${name} Resume`} />
         </div>
       </div>
     </div>
   );
 }
 
-function ScoreBar({ value, color }: { value: number; color: string }) {
+function ScoreBar({ value, color, label }: { value: number; color: string; label: string }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="relative group flex items-center gap-1.5 cursor-default">
       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, value)}%` }} />
       </div>
       <span className="text-[10px] text-green-500 tabular-nums w-6">{value}%</span>
+      <div className="absolute bottom-full left-0 mb-1.5 px-2 py-1 bg-gray-900 text-white text-[10px] font-bold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 shadow-lg">
+        {label}: {value}%
+        <div className="absolute top-full left-3 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900" />
+      </div>
     </div>
   );
 }
@@ -166,7 +154,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
     }
   };
 
-  // Build candidate summaries
   const candidates: CandidateSummary[] = Array.from(
     apps.reduce((map, a) => {
       if (!map.has(a.candidate_id)) {
@@ -225,30 +212,22 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
   return (
     <div className="flex-1 flex h-full overflow-hidden">
 
-      {/* ── Left Sidebar: Candidate List ── */}
+      {/* ── Left Sidebar ── */}
       <aside className="w-72 shrink-0 flex flex-col bg-white border-r border-green-100 h-full overflow-hidden">
-        {/* Sidebar header */}
         <div className="px-5 py-4 border-b border-green-100 bg-green-50/60">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-black uppercase tracking-widest text-green-900">Applications</h2>
               <p className="text-[10px] text-green-500 mt-0.5">{apps.length} total across {candidates.length} candidates</p>
             </div>
-            <button
-              onClick={fetchApps}
-              title="Refresh"
-              className="p-1.5 rounded text-green-500 hover:text-green-800 hover:bg-green-100 transition-colors"
-            >
+            <button onClick={fetchApps} title="Refresh" className="p-1.5 rounded text-green-500 hover:text-green-800 hover:bg-green-100 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Candidate cards */}
         <div className="flex-1 overflow-y-auto">
-          {loading && (
-            <div className="p-6 text-center text-green-400 text-xs">Loading...</div>
-          )}
+          {loading && <div className="p-6 text-center text-green-400 text-xs">Loading...</div>}
           {!loading && candidates.length === 0 && (
             <div className="p-8 text-center">
               <Briefcase className="w-8 h-8 text-green-200 mx-auto mb-3" />
@@ -264,58 +243,38 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                 key={c.id}
                 onClick={() => { setSelectedId(c.id); setStatusFilter('all'); setDateFilter('all'); setSearchInput(''); setSearch(''); }}
                 className={`w-full text-left px-4 py-4 border-b border-green-50 transition-all group ${
-                  isSelected
-                    ? 'bg-green-700 border-l-4 border-l-white'
-                    : 'hover:bg-green-50 border-l-4 border-l-transparent'
+                  isSelected ? 'bg-green-700 border-l-4 border-l-white' : 'hover:bg-green-50 border-l-4 border-l-transparent'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {/* Avatar */}
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${
                     isSelected ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'
                   }`}>
                     {c.name.charAt(0).toUpperCase()}
                   </div>
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-green-900'}`}>
-                      {c.name}
-                    </p>
+                    <p className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-green-900'}`}>{c.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${
                         isSelected ? 'bg-white/20 text-white' : 'bg-green-100 text-green-600'
-                      }`}>
-                        {c.technology}
-                      </span>
-                      <span className={`text-[10px] ${isSelected ? 'text-green-200' : 'text-green-400'}`}>
-                        {c.country}
-                      </span>
+                      }`}>{c.technology}</span>
+                      <span className={`text-[10px] ${isSelected ? 'text-green-200' : 'text-green-400'}`}>{c.country}</span>
                     </div>
-                    {/* Stats row */}
                     <div className="flex items-center gap-3 mt-2">
                       <span className={`text-[10px] font-semibold ${isSelected ? 'text-green-100' : 'text-green-600'}`}>
                         <span className={`font-black text-sm ${isSelected ? 'text-white' : 'text-green-700'}`}>{c.relevant}</span>
                         <span className={`ml-0.5 ${isSelected ? 'text-green-200' : 'text-green-400'}`}>/ {c.total} matched</span>
                       </span>
                     </div>
-                    {/* Match rate bar */}
                     <div className={`mt-2 h-1 rounded-full overflow-hidden ${isSelected ? 'bg-white/20' : 'bg-green-100'}`}>
-                      <div
-                        className={`h-full rounded-full transition-all ${isSelected ? 'bg-white' : 'bg-green-500'}`}
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className={`h-full rounded-full transition-all ${isSelected ? 'bg-white' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
                     </div>
-                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-green-200' : 'text-green-400'}`}>
-                      {Math.round(pct)}% match rate
-                    </p>
-                    {/* Resume preview button */}
+                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-green-200' : 'text-green-400'}`}>{Math.round(pct)}% match rate</p>
                     {c.resume_url && (
                       <button
                         onClick={e => { e.stopPropagation(); setResumePreview({ name: c.name, url: c.resume_url! }); }}
                         className={`mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
-                          isSelected
-                            ? 'bg-white/20 text-white hover:bg-white/30'
-                            : 'bg-green-100 text-green-600 hover:bg-green-200'
+                          isSelected ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-green-100 text-green-600 hover:bg-green-200'
                         }`}
                       >
                         <FileText className="w-3 h-3" /> View Resume
@@ -332,7 +291,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
       {/* ── Right Panel ── */}
       <div className="flex-1 flex flex-col overflow-hidden bg-green-50/30">
 
-        {/* Empty state — no candidate selected */}
         {!selectedId && !loading && (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
             <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
@@ -353,7 +311,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
           <div className="flex-1 flex items-center justify-center text-green-400 text-sm">Loading...</div>
         )}
 
-        {/* Candidate selected view */}
         {selectedId && selected && (
           <>
             {/* Stats header */}
@@ -362,9 +319,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                 <div>
                   <h3 className="text-xl font-black text-green-900">{selected.name}</h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                      {selected.technology}
-                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-green-100 text-green-700 px-2 py-0.5 rounded">{selected.technology}</span>
                     <span className="text-xs text-green-500">{selected.country}</span>
                     {selected.resume_url && (
                       <button
@@ -399,7 +354,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
 
             {/* Filter bar */}
             <div className="bg-white border-b border-green-100 px-6 py-3 flex items-center gap-2 flex-wrap shrink-0">
-              {/* Status tabs */}
               <div className="flex items-center bg-green-50 rounded-lg p-1 gap-0.5">
                 {([
                   ['all', 'All', candidateApps.length],
@@ -410,9 +364,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                     key={val}
                     onClick={() => setStatusFilter(val)}
                     className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md transition-all ${
-                      statusFilter === val
-                        ? 'bg-green-700 text-white shadow-sm'
-                        : 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                      statusFilter === val ? 'bg-green-700 text-white shadow-sm' : 'text-green-600 hover:text-green-800 hover:bg-green-100'
                     }`}
                   >
                     {label}
@@ -425,7 +377,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
 
               <div className="w-px h-5 bg-green-100 mx-1" />
 
-              {/* Date filter */}
               <div className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-green-400" />
                 <div className="flex items-center bg-green-50 rounded-lg p-1 gap-0.5">
@@ -434,9 +385,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                       key={btn.value}
                       onClick={() => setDateFilter(btn.value)}
                       className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-md transition-all ${
-                        dateFilter === btn.value
-                          ? 'bg-green-700 text-white shadow-sm'
-                          : 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                        dateFilter === btn.value ? 'bg-green-700 text-white shadow-sm' : 'text-green-600 hover:text-green-800 hover:bg-green-100'
                       }`}
                     >
                       {btn.label}
@@ -445,7 +394,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                 </div>
               </div>
 
-              {/* Search */}
               <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-lg px-3 py-1.5 flex-1 min-w-[180px]">
                 <Search className="w-3.5 h-3.5 text-green-400 shrink-0" />
                 <input
@@ -467,15 +415,11 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                 )}
               </div>
 
-              <span className="text-[10px] text-green-400 font-bold ml-auto whitespace-nowrap">
-                {filtered.length} shown
-              </span>
+              <span className="text-[10px] text-green-400 font-bold ml-auto whitespace-nowrap">{filtered.length} shown</span>
             </div>
 
             {error && (
-              <div className="mx-6 mt-3 text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">
-                {error}
-              </div>
+              <div className="mx-6 mt-3 text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>
             )}
 
             {/* Table */}
@@ -517,34 +461,38 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                             isConfirming ? 'bg-red-50' :
                             idx % 2 === 0 ? 'bg-white hover:bg-green-50/50' : 'bg-green-50/20 hover:bg-green-50/60'
                           }`}>
-                            {/* Job title */}
                             <td className="px-6 py-4">
                               <p className="text-sm font-bold text-green-900 max-w-[260px] truncate" title={app.job_title}>
                                 {app.job_title || '—'}
                               </p>
                             </td>
-                            {/* Company */}
                             <td className="px-4 py-4 text-sm text-green-700 font-medium">{app.job_company || '—'}</td>
-                            {/* Location */}
                             <td className="px-4 py-4 text-xs text-green-500 max-w-[160px] truncate">{app.job_location || '—'}</td>
-                            {/* Score */}
+                            {/* Score column */}
                             <td className="px-4 py-4">
                               <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border-2 shrink-0" style={{
-                                  borderColor: app.score >= 70 ? '#34d399' : app.score >= 50 ? '#fbbf24' : '#fca5a5',
-                                  color: app.score >= 70 ? '#059669' : app.score >= 50 ? '#d97706' : '#ef4444',
-                                  backgroundColor: app.score >= 70 ? '#ecfdf5' : app.score >= 50 ? '#fffbeb' : '#fff1f2',
-                                }}>
-                                  {app.score ?? '—'}
+                                {/* Overall score badge with tooltip */}
+                                <div className="relative group cursor-default shrink-0">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border-2" style={{
+                                    borderColor: app.score >= 70 ? '#34d399' : app.score >= 50 ? '#fbbf24' : '#fca5a5',
+                                    color: app.score >= 70 ? '#059669' : app.score >= 50 ? '#d97706' : '#ef4444',
+                                    backgroundColor: app.score >= 70 ? '#ecfdf5' : app.score >= 50 ? '#fffbeb' : '#fff1f2',
+                                  }}>
+                                    {app.score ?? '—'}
+                                  </div>
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-gray-900 text-white text-[10px] font-bold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 shadow-lg">
+                                    Overall Score
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900" />
+                                  </div>
                                 </div>
+                                {/* Sub-score bars with tooltips */}
                                 <div className="space-y-0.5">
-                                  <ScoreBar value={app.skill_match_score ?? 0} color="bg-blue-400" />
-                                  <ScoreBar value={app.experience_score ?? 0} color="bg-green-400" />
-                                  <ScoreBar value={app.location_score ?? 0} color="bg-teal-400" />
+                                  <ScoreBar value={app.skill_match_score ?? 0} color="bg-blue-400" label="Skill Match" />
+                                  <ScoreBar value={app.experience_score ?? 0} color="bg-green-400" label="Experience" />
+                                  <ScoreBar value={app.location_score ?? 0} color="bg-teal-400" label="Location" />
                                 </div>
                               </div>
                             </td>
-                            {/* Status */}
                             <td className="px-4 py-4">
                               {isRelevant ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200">
@@ -564,26 +512,19 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                                 </button>
                               )}
                             </td>
-                            {/* Date */}
                             <td className="px-4 py-4 text-xs text-green-400 whitespace-nowrap">
                               {app.created_at ? new Date(app.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                             </td>
-                            {/* Link */}
                             <td className="px-4 py-4">
                               {app.job_url ? (
-                                <a
-                                  href={app.job_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors"
-                                >
+                                <a href={app.job_url} target="_blank" rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors">
                                   <ExternalLink className="w-3 h-3" /> View
                                 </a>
                               ) : (
                                 <span className="text-xs text-green-200">—</span>
                               )}
                             </td>
-                            {/* Delete */}
                             <td className="px-2 py-4">
                               {isConfirming ? (
                                 <div className="flex items-center gap-1">
@@ -605,7 +546,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                               )}
                             </td>
                           </tr>
-                          {/* Expanded reasons */}
                           {isExpanded && reasons.length > 0 && !isDeleting && (
                             <tr className={idx % 2 === 0 ? 'bg-white' : 'bg-green-50/20'}>
                               <td colSpan={8} className="px-6 py-3 border-b border-red-100">
@@ -634,7 +574,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
         )}
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-green-800 text-white px-4 py-3 rounded-xl shadow-xl border border-green-700">
           <CheckCircle2 className="w-4 h-4 text-green-300" />
@@ -642,7 +581,6 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
         </div>
       )}
 
-      {/* Resume Preview Modal */}
       {resumePreview && (
         <ResumeModal
           name={resumePreview.name}
