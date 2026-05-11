@@ -322,7 +322,7 @@ app.get('/api/applications', authenticate, async (req: any, res) => {
   const { candidate_id } = req.query;
   let query = getDb()
     .from('applications')
-    .select('*, candidates(name, technology, country, experience_years)')
+    .select('*, candidates(name, technology, country, experience_years, resume_url)')
     .eq('user_id', req.user.id);
   if (candidate_id) query = query.eq('candidate_id', String(candidate_id));
   const { data, error } = await query.order('created_at', { ascending: false });

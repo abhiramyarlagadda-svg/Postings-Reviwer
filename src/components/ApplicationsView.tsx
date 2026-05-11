@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Trash2, X, Calendar, Users, Briefcase } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, CheckCircle2, Trash2, X, Calendar, Users, Briefcase, FileText, Maximize2, Download } from 'lucide-react';
 import { useAuth } from '@/src/lib/AuthContext';
 
 interface Application {
@@ -22,6 +22,7 @@ interface Application {
     technology: string;
     country: string;
     experience_years: number;
+    resume_url?: string;
   };
 }
 
@@ -32,6 +33,7 @@ interface CandidateSummary {
   country: string;
   total: number;
   relevant: number;
+  resume_url?: string;
 }
 
 type StatusFilter = 'all' | 'relevant' | 'irrelevant';
@@ -39,6 +41,61 @@ type DateFilter = 'all' | 'today' | 'week' | 'month';
 
 function localDateStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function ResumeModal({ name, url, onClose }: { name: string; url: string; onClose: () => void }) {
+  const isPdf = url.toLowerCase().includes('.pdf') || url.toLowerCase().includes('pdf');
+  const viewerUrl = isPdf ? url : `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex-1 flex flex-col m-4 md:m-8 bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Modal header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-green-100 bg-green-50 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-green-700 flex items-center justify-center">
+              <FileText className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-green-500">Resume Preview</p>
+              <p className="text-base font-black text-green-900">{name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors"
+            >
+              <Maximize2 className="w-3 h-3" /> Open Full
+            </a>
+            <a
+              href={url}
+              download
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-green-200 text-green-700 hover:bg-green-50 transition-colors"
+            >
+              <Download className="w-3 h-3" /> Download
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-green-400 hover:text-green-800 hover:bg-green-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        {/* Resume frame */}
+        <div className="flex-1 overflow-hidden bg-gray-100">
+          <iframe
+            src={viewerUrl}
+            className="w-full h-full border-0"
+            title={`${name} Resume`}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ScoreBar({ value, color }: { value: number; color: string }) {
@@ -67,6 +124,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  const [resumePreview, setResumePreview] = useState<{ name: string; url: string } | null>(null);
 
   const fetchApps = useCallback(async () => {
     setLoading(true);
@@ -117,6 +175,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
           name: a.candidates?.name || 'Unknown',
           technology: a.candidates?.technology || '',
           country: a.candidates?.country || '',
+          resume_url: a.candidates?.resume_url,
           total: 0, relevant: 0,
         });
       }
@@ -249,6 +308,19 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                     <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-green-200' : 'text-green-400'}`}>
                       {Math.round(pct)}% match rate
                     </p>
+                    {/* Resume preview button */}
+                    {c.resume_url && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setResumePreview({ name: c.name, url: c.resume_url! }); }}
+                        className={`mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
+                          isSelected
+                            ? 'bg-white/20 text-white hover:bg-white/30'
+                            : 'bg-green-100 text-green-600 hover:bg-green-200'
+                        }`}
+                      >
+                        <FileText className="w-3 h-3" /> View Resume
+                      </button>
+                    )}
                   </div>
                 </div>
               </button>
@@ -294,6 +366,14 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
                       {selected.technology}
                     </span>
                     <span className="text-xs text-green-500">{selected.country}</span>
+                    {selected.resume_url && (
+                      <button
+                        onClick={() => setResumePreview({ name: selected.name, url: selected.resume_url! })}
+                        className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors"
+                      >
+                        <FileText className="w-3 h-3" /> Resume
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
@@ -560,6 +640,15 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
           <CheckCircle2 className="w-4 h-4 text-green-300" />
           <span className="text-sm font-bold">{toast}</span>
         </div>
+      )}
+
+      {/* Resume Preview Modal */}
+      {resumePreview && (
+        <ResumeModal
+          name={resumePreview.name}
+          url={resumePreview.url}
+          onClose={() => setResumePreview(null)}
+        />
       )}
     </div>
   );
