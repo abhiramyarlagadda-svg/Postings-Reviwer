@@ -98,7 +98,7 @@ function ScoreBar({ value, color, label }: { value: number; color: string; label
 }
 
 export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void }) {
-  const { token } = useAuth();
+  const { authedFetch } = useAuth();
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -120,16 +120,16 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
     setExpanded(new Set());
     setConfirmingDelete(null);
     try {
-      const res = await fetch('/api/applications', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await authedFetch('/api/applications');
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error((data as any).error || 'Failed to fetch'); }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch');
       setApps(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [authedFetch]);
 
   useEffect(() => { fetchApps(); }, [fetchApps]);
 
@@ -139,7 +139,7 @@ export default function ApplicationsView({ onDeleted }: { onDeleted?: () => void
     setConfirmingDelete(null);
     setDeletingIds(p => { const n = new Set(p); n.add(id); return n; });
     try {
-      const res = await fetch(`/api/applications/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const res = await authedFetch(`/api/applications/${id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       setTimeout(() => {

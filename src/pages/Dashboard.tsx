@@ -28,7 +28,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const { token } = useAuth();
+  const { authedFetch } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +46,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
       fd.append('companies_worked', JSON.stringify(companies));
       if (file) fd.append('resume', file);
 
-      const res = await fetch('/api/candidates', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd
-      });
+      const res = await authedFetch('/api/candidates', { method: 'POST', body: fd });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add candidate');
@@ -189,7 +185,7 @@ function AddCandidateModal({ onClose, onAdded }: { onClose: () => void; onAdded:
 }
 
 export default function Dashboard() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, authedFetch } = useAuth();
   const navigate = useNavigate();
   const [view, setView] = useState<View>('candidates');
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -203,7 +199,8 @@ export default function Dashboard() {
   const fetchCandidates = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/candidates', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await authedFetch('/api/candidates');
+      if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data)) {
         setCandidates(data);
@@ -218,10 +215,7 @@ export default function Dashboard() {
 
   const handleDeleteCandidate = async (id: string) => {
     try {
-      const res = await fetch(`/api/candidates/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authedFetch(`/api/candidates/${id}`, { method: 'DELETE' });
       if (!res.ok) return;
       setCandidates(prev => prev.filter(c => c.id !== id));
       if (selectedId === id) {

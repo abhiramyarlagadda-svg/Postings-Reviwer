@@ -39,7 +39,7 @@ const localMidnightISO = (d: Date): string =>
 type QuickFilter = 'today' | 'yesterday' | 'week' | 'all' | null;
 
 export default function CandidateDetail({ candidate, appsRevision }: Props) {
-  const { token } = useAuth();
+  const { authedFetch } = useAuth();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
@@ -60,9 +60,6 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
   const [hiddenJobsCount, setHiddenJobsCount] = useState(0);
   const [analysisProgress, setAnalysisProgress] = useState(0);
 
-  const tokenRef = useRef(token);
-  useEffect(() => { tokenRef.current = token; }, [token]);
-  const authHeaders = useCallback(() => ({ Authorization: `Bearer ${tokenRef.current}` }), []);
   const isInitialMount = useRef(true);
 
 
@@ -81,9 +78,9 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
       if (effectiveTo)   params.set('date_to',   effectiveTo);
       if (candidate.technology) params.set('technology', candidate.technology);
 
-      const res = await fetch(`/api/jobs?${params}`, { headers: authHeaders() });
+      const res = await authedFetch(`/api/jobs?${params}`);
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error((data as any).error || 'Failed to fetch jobs'); }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch jobs');
 
       const exclude = excludeIds ?? analysedJobIds;
       const allJobs: Job[] = data.jobs || [];
@@ -101,7 +98,7 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
     } finally {
       setLoadingJobs(false);
     }
-  }, [candidate.technology, dateFrom, dateTo, authHeaders, analysedJobIds]);
+  }, [candidate.technology, dateFrom, dateTo, authedFetch, analysedJobIds]);
 
   // On candidate change: load already-analysed IDs first, then fetch filtered jobs
   useEffect(() => {
@@ -109,8 +106,8 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
     const init = async () => {
       let analysedIds = new Set<string>();
       try {
-        const res = await fetch(`/api/applications?candidate_id=${candidate.id}`, { headers: authHeaders() });
-        const data = await res.json();
+        const res = await authedFetch(`/api/applications?candidate_id=${candidate.id}`);
+        const data = await res.json().catch(() => []);
         if (!cancelled && Array.isArray(data)) {
           analysedIds = new Set(data.map((a: any) => a.job_id));
           setAnalysedJobIds(analysedIds);
@@ -177,9 +174,9 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
     setError('');
     setSavedCount(null);
     try {
-      const response = await fetch('/api/ai/analyse-stream', {
+      const response = await authedFetch('/api/ai/analyse-stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ candidate, jobs })
       });
 
@@ -228,9 +225,9 @@ export default function CandidateDetail({ candidate, appsRevision }: Props) {
       setResults(sorted);
       setFilterApplied('all');
 
-      const saveRes = await fetch('/api/applications/analyse', {
+      const saveRes = await authedFetch('/api/applications/analyse', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           candidate_id: candidate.id,
           results: sorted.map(r => ({
